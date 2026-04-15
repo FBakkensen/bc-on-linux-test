@@ -1,0 +1,21 @@
+# Build outputs
+.build/
+*.app
+
+# AL symbol caches
+app/.alpackages/
+test/.alpackages/
+
+# AL / VS Code AL extension generated
+.vscode/.alcache/
+.vscode/.alpackages/
+**/.snapshots/
+**/rad.json
+
+# Upstream BC runtime checkout — separate clone of StefanMaron/MsDyn365Bc.On.Linux
+bc-linux/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp

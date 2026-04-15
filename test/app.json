@@ -1,0 +1,39 @@
+{
+  "id": "efd720b0-1be3-45ff-87f6-6161ffb5376b",
+  "name": "Bc Linux Smoke Tests",
+  "publisher": "FBakkensen",
+  "version": "1.0.0.0",
+  "brief": "Minimal Business Central on Linux smoke tests.",
+  "description": "A tiny AL test app used to validate Linux-based Business Central test execution.",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "",
+  "logo": "",
+  "dependencies": [
+    {
+      "id": "b5f2cb5b-38ad-4cf7-a94f-2168c7093b82",
+      "name": "Bc Linux Smoke",
+      "publisher": "FBakkensen",
+      "version": "1.0.0.0"
+    }
+  ],
+  "screenshots": [],
+  "platform": "27.0.0.0",
+  "application": "27.0.0.0",
+  "idRanges": [
+    {
+      "from": 50100,
+      "to": 50149
+    }
+  ],
+  "resourceExposurePolicy": {
+    "allowDebugging": true,
+    "allowDownloadingSource": false,
+    "includeSourceInSymbolFile": false
+  },
+  "runtime": "16.1",
+  "features": [
+    "NoImplicitWith"
+  ]
+}
