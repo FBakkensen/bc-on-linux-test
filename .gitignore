@@ -15,6 +15,10 @@ test/.alpackages/
 # Upstream BC runtime checkout — separate clone of StefanMaron/MsDyn365Bc.On.Linux
 bc-linux/
 
+# Copilot Coding Agent CI runtime state (populated by .github/workflows/copilot-setup-steps.yml)
+.bc-artifacts/
+.bc-cache/
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

@@ -1,0 +1,156 @@
+name: Copilot Setup Steps
+
+# Runs once before GitHub Copilot's coding agent starts working on a task
+# in this repo. Its job is to bring the runner to a state where the agent
+# can run `./scripts/smoke.sh` and get a fast inner loop against a real
+# Business Central instance.
+#
+# What this does:
+#   1. Clones StefanMaron/MsDyn365Bc.On.Linux into bc-linux/ (gitignored)
+#   2. Downloads BC artifacts to .bc-artifacts/<version>/
+#   3. Pulls the bc-runner + sql docker images (warm cache, no boot yet)
+#   4. Resolves the selective keep-app set from the consumer's app.json files
+#   5. Installs the .NET 8 SDK + Linux AL compiler
+#   6. Stages BC symbols into app/.alpackages/ and test/.alpackages/
+#   7. Fires `docker compose up -d` so BC boots in parallel with the agent
+#
+# Firewall note:
+#   bcartifacts.blob.core.windows.net is NOT in Copilot's default allowlist.
+#   Add it as a custom allowlist entry on your fork before assigning Copilot
+#   a task.
+
+on:
+  workflow_dispatch:
+  # The Copilot agent invokes this workflow automatically before each task.
+  # No other triggers are needed.
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # NOTE on env vars: Copilot's coding-agent wrapper around setup-steps
+    # does NOT propagate the job-level `env:` block into the steps it
+    # invokes. The robust pattern is to write everything to $GITHUB_ENV
+    # from a first step.
+
+    steps:
+      - name: Set BC environment variables
+        run: |
+          {
+            echo "BC_VERSION=27.5"
+            echo "BC_COUNTRY=w1"
+            echo "BC_TYPE=sandbox"
+            echo "BC_RUNNER_IMAGE=ghcr.io/stefanmaron/msdyn365bc.on.linux/bc-runner:latest"
+            echo "AL_TOOL_VERSION=16.2.28.57946"
+            echo "BC_LINUX_REF=master"
+            echo "APP_DIRS=app"
+            echo "TEST_APP_DIRS=test"
+            echo "TEST_CODEUNIT_RANGE=50100..50149"
+          } >> "$GITHUB_ENV"
+
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Checkout MsDyn365Bc.On.Linux into bc-linux/
+        uses: actions/checkout@v4
+        with:
+          repository: StefanMaron/MsDyn365Bc.On.Linux
+          ref: ${{ env.BC_LINUX_REF }}
+          path: bc-linux
+
+      - name: Download BC artifacts + pull docker images (parallel)
+        run: |
+          set -e
+          mkdir -p ".bc-artifacts/$BC_VERSION"
+          (
+            bc-linux/scripts/download-artifacts.sh \
+              "$BC_TYPE" "$BC_VERSION" "$BC_COUNTRY" \
+              "$PWD/.bc-artifacts/$BC_VERSION"
+          ) &
+          ART_PID=$!
+          (
+            cd bc-linux
+            for attempt in 1 2 3 4 5; do
+              if BC_RUNNER_IMAGE="$BC_RUNNER_IMAGE" docker compose pull --quiet; then break; fi
+              echo "docker compose pull failed (attempt $attempt/5); retrying in 15s..."
+              sleep 15
+            done
+          ) &
+          PULL_PID=$!
+          wait $ART_PID  || { echo "artifact download failed"; exit 1; }
+          wait $PULL_PID || { echo "docker pull failed"; exit 1; }
+
+      - name: Resolve apps to keep in BC database
+        run: |
+          # Include bc-linux's own custom Test Runner Extension app.json
+          # so its declared dep on Microsoft Test Runner gets walked into
+          # the closure. Without this the selective filter wipes Microsoft
+          # Test Runner and the entrypoint's TestRunnerExtension publish
+          # later fails with AL1024.
+          ARGS="--app-json bc-linux/extensions/TestRunnerExtension/app.json"
+          for d in $APP_DIRS $TEST_APP_DIRS; do
+            [ -z "$d" ] && continue
+            if [ -f "$d/app.json" ]; then
+              ARGS="$ARGS --app-json $d/app.json"
+            fi
+          done
+          KEEP_IDS=$(python3 bc-linux/scripts/resolve-keep-app-ids.py \
+            $ARGS \
+            --artifact-dir ".bc-artifacts/$BC_VERSION")
+          echo "Resolved keep set: $KEEP_IDS"
+          mkdir -p .bc-cache
+          {
+            echo "BC_CLEAR_ALL_APPS=selective"
+            echo "BC_KEEP_APP_IDS=$KEEP_IDS"
+            echo "BC_VERSION=$BC_VERSION"
+            echo "BC_COUNTRY=$BC_COUNTRY"
+            echo "BC_TYPE=$BC_TYPE"
+            echo "BC_RUNNER_IMAGE=$BC_RUNNER_IMAGE"
+          } > .bc-cache/env
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install AL compiler (Linux)
+        run: |
+          dotnet tool install -g \
+            Microsoft.Dynamics.BusinessCentral.Development.Tools.Linux \
+            --version "$AL_TOOL_VERSION" 2>/dev/null || true
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Stage symbols into app/.alpackages and test/.alpackages
+        run: |
+          # Use the workspace's existing symbol downloader so CI matches
+          # exactly what developers run locally.
+          ./scripts/download-symbols.sh
+          echo "app/.alpackages:  $(ls app/.alpackages/*.app 2>/dev/null | wc -l) .app files"
+          echo "test/.alpackages: $(ls test/.alpackages/*.app 2>/dev/null | wc -l) .app files"
+
+      - name: Smoke test — does smoke.sh see everything it needs?
+        run: |
+          test -d bc-linux/scripts           || { echo "missing bc-linux/scripts"; exit 1; }
+          test -d ".bc-artifacts/$BC_VERSION" || { echo "missing artifacts"; exit 1; }
+          test -d app/.alpackages             || { echo "missing app symbols"; exit 1; }
+          test -d test/.alpackages            || { echo "missing test symbols"; exit 1; }
+          command -v al >/dev/null            || { echo "AL compiler not on PATH"; exit 1; }
+          test -f .bc-cache/env               || { echo "missing .bc-cache/env"; exit 1; }
+          echo "Setup OK. Agent can now run ./scripts/smoke.sh"
+
+      - name: Start BC in the background (fire-and-forget)
+        # Start BC NOW so it boots in parallel with the agent's "thinking"
+        # phase. `docker compose up -d` returns immediately. BC's entrypoint
+        # then takes ~3-5 minutes to fully boot in the background. If BC
+        # isn't ready when the agent first calls ./scripts/smoke.sh, the
+        # instructions tell it to run `docker compose up -d --wait`.
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          . .bc-cache/env
+          set +a
+          cd bc-linux
+          docker compose up -d
+          echo "BC boot launched in background. Current status:"
+          docker compose ps
