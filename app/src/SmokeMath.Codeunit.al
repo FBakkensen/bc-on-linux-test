@@ -4,4 +4,9 @@ codeunit 50000 "Smoke Math"
     begin
         exit(A + B);
     end;
+
+    procedure Multiply(A: Integer; B: Integer): Integer
+    begin
+        exit(A * B);
+    end;
 }
