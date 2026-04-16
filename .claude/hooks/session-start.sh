@@ -57,175 +57,7 @@ export BC_VERSION BC_COUNTRY BC_TYPE BC_RUNNER_IMAGE AL_TOOL_VERSION \
        BC_LINUX_REF APP_DIRS TEST_APP_DIRS TEST_CODEUNIT_RANGE
 
 # -----------------------------------------------------------------------------
-# 2. Ensure a Docker-compatible daemon is reachable
-# -----------------------------------------------------------------------------
-# Strategy cascade — returns on first success:
-#   a. Existing daemon already accepts `docker info`.
-#   b. Alternative docker.sock (Docker Desktop, rootless, user mount).
-#   c. Podman compat socket.
-#   d. Start preinstalled docker via systemctl / service.
-#   e. Install Docker via get.docker.com, then start dockerd directly.
-#   f. If bridge setup fails on nftables, switch to iptables-legacy and retry.
-#   g. Rootless dockerd as last resort.
-#
-# The official Claude Code docs don't specify which (if any) of these the
-# web sandbox supports, so the hook tries them all and reports precisely
-# which one worked — or dumps a clear diagnostic and exits 1.
-
-as_root() {
-  if [ "$(id -u)" = "0" ]; then
-    "$@"
-  else
-    sudo "$@"
-  fi
-}
-
-wait_for_docker() {
-  local timeout=${1:-30}
-  for i in $(seq 1 "$timeout"); do
-    if docker info >/dev/null 2>&1; then
-      echo "  docker: daemon ready after ${i}s"
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
-}
-
-try_socket() {
-  local sock="$1"
-  [ -z "$sock" ] && return 1
-  [ -S "$sock" ] || return 1
-  export DOCKER_HOST="unix://$sock"
-  if docker info >/dev/null 2>&1; then
-    echo "  docker: using socket $sock"
-    echo "export DOCKER_HOST=unix://$sock" >> "$CLAUDE_ENV_FILE"
-    return 0
-  fi
-  unset DOCKER_HOST
-  return 1
-}
-
-ensure_docker_ready() {
-  # (a) Existing daemon on default socket.
-  if docker info >/dev/null 2>&1; then
-    echo "  docker: existing daemon responds — using it"
-    return 0
-  fi
-
-  # (b) Alternative docker.sock paths.
-  for sock in \
-      "${DOCKER_HOST:+${DOCKER_HOST#unix://}}" \
-      "/var/run/docker.sock" \
-      "/run/docker.sock" \
-      "$HOME/.docker/run/docker.sock" \
-      "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/docker.sock"; do
-    try_socket "$sock" && return 0
-  done
-
-  # (c) Podman compat socket.
-  if command -v podman >/dev/null 2>&1; then
-    # Try to start the user-level podman API socket if not already up.
-    if command -v systemctl >/dev/null 2>&1; then
-      systemctl --user start podman.socket 2>/dev/null || \
-        as_root systemctl start podman.socket 2>/dev/null || true
-    fi
-    for sock in \
-        "/run/podman/podman.sock" \
-        "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"; do
-      try_socket "$sock" && return 0
-    done
-  fi
-
-  # (d) Preinstalled docker not running — try init systems.
-  if command -v docker >/dev/null 2>&1; then
-    if command -v systemctl >/dev/null 2>&1 && \
-         as_root systemctl start docker 2>/dev/null; then
-      wait_for_docker 15 && return 0
-    fi
-    if command -v service >/dev/null 2>&1 && \
-         as_root service docker start 2>/dev/null; then
-      wait_for_docker 15 && return 0
-    fi
-  fi
-
-  # (e) Install docker if missing, then start it directly.
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "  docker: installing via get.docker.com"
-    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    as_root sh /tmp/get-docker.sh
-    rm -f /tmp/get-docker.sh
-  fi
-
-  echo "  docker: launching dockerd directly [attempt e]"
-  as_root pkill -x dockerd 2>/dev/null || true
-  sleep 1
-  as_root sh -c 'echo "=== attempt e: default (nft) ===" >> /var/log/dockerd.log; nohup dockerd >> /var/log/dockerd.log 2>&1 &'
-  wait_for_docker 30 && return 0
-
-  # (f) Common fix for sandboxes without nftables: iptables-legacy.
-  if command -v update-alternatives >/dev/null 2>&1 && \
-     [ -e /usr/sbin/iptables-legacy ]; then
-    echo "  docker: retrying with iptables-legacy [attempt f]"
-    as_root update-alternatives --set iptables /usr/sbin/iptables-legacy 2>/dev/null || true
-    as_root update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true
-    as_root pkill -x dockerd 2>/dev/null || true
-    sleep 1
-    as_root sh -c 'echo "=== attempt f: iptables-legacy ===" >> /var/log/dockerd.log; nohup dockerd >> /var/log/dockerd.log 2>&1 &'
-    wait_for_docker 30 && return 0
-  fi
-
-  # (g) Rootless docker — sidesteps iptables/netfilter entirely via
-  # slirp4netns + user namespaces. Requires a non-root UID; dockerd-rootless.sh
-  # refuses to run as root by policy.
-  as_root pkill -x dockerd 2>/dev/null || true
-  if [ "$(id -u)" = "0" ]; then
-    echo "  docker: skipping rootless [attempt g] — running as root, dockerd-rootless won't start"
-  else
-    echo "  docker: attempting rootless setup [attempt g]"
-    if ! command -v newuidmap >/dev/null 2>&1 || \
-       ! command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1; then
-      as_root apt-get update -qq 2>/dev/null || true
-      as_root apt-get install -y -qq uidmap docker-ce-rootless-extras slirp4netns 2>/dev/null || true
-    fi
-  fi
-  if [ "$(id -u)" != "0" ] && \
-     command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1 && \
-     command -v newuidmap >/dev/null 2>&1; then
-    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    mkdir -p "$XDG_RUNTIME_DIR"
-    chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
-    dockerd-rootless-setuptool.sh install --force 2>&1 | tail -20 || true
-    nohup dockerd-rootless.sh > /tmp/dockerd-rootless.log 2>&1 &
-    export DOCKER_HOST="unix://$XDG_RUNTIME_DIR/docker.sock"
-    if wait_for_docker 20; then
-      {
-        echo "export XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
-        echo "export DOCKER_HOST=$DOCKER_HOST"
-      } >> "$CLAUDE_ENV_FILE"
-      return 0
-    fi
-  else
-    echo "  docker: rootless prereqs unavailable (uidmap / docker-ce-rootless-extras)"
-  fi
-
-  return 1
-}
-
-echo "docker: ensuring daemon is reachable..."
-if ! ensure_docker_ready; then
-  echo "ERROR: no Docker-compatible runtime could be brought up."
-  echo "       Tried: default socket, alt sockets, podman socket, init start,"
-  echo "              fresh install + direct dockerd, iptables-legacy, rootless."
-  echo "       Last 50 lines of /var/log/dockerd.log:"
-  as_root tail -50 /var/log/dockerd.log 2>/dev/null || true
-  echo "       Last 50 lines of /tmp/dockerd-rootless.log:"
-  tail -50 /tmp/dockerd-rootless.log 2>/dev/null || true
-  exit 1
-fi
-
-# -----------------------------------------------------------------------------
-# 3. Clone MsDyn365Bc.On.Linux into bc-linux/
+# 2. Clone MsDyn365Bc.On.Linux into bc-linux/
 # -----------------------------------------------------------------------------
 if [ ! -d bc-linux/.git ]; then
   echo "Cloning StefanMaron/MsDyn365Bc.On.Linux ($BC_LINUX_REF) into bc-linux/"
@@ -236,7 +68,7 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# 4. Download BC artifacts + docker compose pull (parallel, with retries)
+# 3. Download BC artifacts + docker compose pull (parallel, with retries)
 # -----------------------------------------------------------------------------
 mkdir -p ".bc-artifacts/$BC_VERSION"
 
@@ -261,7 +93,7 @@ wait $ART_PID  || { echo "artifact download failed"; exit 1; }
 wait $PULL_PID || { echo "docker pull failed"; exit 1; }
 
 # -----------------------------------------------------------------------------
-# 5. Resolve selective keep-app set from consumer app.json files
+# 4. Resolve selective keep-app set from consumer app.json files
 # -----------------------------------------------------------------------------
 # Include bc-linux's own TestRunnerExtension app.json so its dep on
 # Microsoft Test Runner walks into the keep closure — without this
@@ -289,7 +121,7 @@ mkdir -p .bc-cache
 } > .bc-cache/env
 
 # -----------------------------------------------------------------------------
-# 6. Install .NET 8 SDK (idempotent)
+# 5. Install .NET 8 SDK (idempotent)
 # -----------------------------------------------------------------------------
 export DOTNET_ROOT="$HOME/.dotnet"
 export PATH="$DOTNET_ROOT:$DOTNET_ROOT/tools:$PATH"
@@ -318,7 +150,7 @@ fi
 } >> "$CLAUDE_ENV_FILE"
 
 # -----------------------------------------------------------------------------
-# 7. Install Linux AL compiler
+# 6. Install Linux AL compiler
 # -----------------------------------------------------------------------------
 if [ ! -x "$DOTNET_ROOT/tools/AL" ] && [ ! -x "$DOTNET_ROOT/tools/al" ]; then
   echo "Installing Microsoft.Dynamics.BusinessCentral.Development.Tools.Linux $AL_TOOL_VERSION"
@@ -337,7 +169,7 @@ if [ -x "$DOTNET_ROOT/tools/AL" ] && [ ! -e "$DOTNET_ROOT/tools/al" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# 8. Stage BC symbols into app/.alpackages and test/.alpackages
+# 7. Stage BC symbols into app/.alpackages and test/.alpackages
 # -----------------------------------------------------------------------------
 # stage-symbols.py reads the transitive dep closure directly from the
 # artifact bundle — no running BC needed.
@@ -354,7 +186,7 @@ echo "app/.alpackages:  $(ls app/.alpackages/*.app 2>/dev/null | wc -l) .app fil
 echo "test/.alpackages: $(ls test/.alpackages/*.app 2>/dev/null | wc -l) .app files"
 
 # -----------------------------------------------------------------------------
-# 9. Sanity-check that smoke.sh will find everything it needs
+# 8. Sanity-check that smoke.sh will find everything it needs
 # -----------------------------------------------------------------------------
 test -d bc-linux/scripts            || { echo "missing bc-linux/scripts"; exit 1; }
 test -d ".bc-artifacts/$BC_VERSION" || { echo "missing artifacts"; exit 1; }
@@ -365,7 +197,7 @@ test -f .bc-cache/env               || { echo "missing .bc-cache/env"; exit 1; }
 echo "Setup OK."
 
 # -----------------------------------------------------------------------------
-# 10. Boot BC and wait for healthy
+# 9. Boot BC and wait for healthy
 # -----------------------------------------------------------------------------
 # Propagate the resolved config into bc-linux/.env so any later
 # `docker compose up -d --wait` the agent runs sees identical config
