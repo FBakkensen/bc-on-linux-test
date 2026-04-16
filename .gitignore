@@ -18,6 +18,7 @@ bc-linux/
 # Copilot Coding Agent CI runtime state (populated by .github/workflows/copilot-setup-steps.yml)
 .bc-artifacts/
 .bc-cache/
+.symbols/
 
 # OS / editor noise
 .DS_Store

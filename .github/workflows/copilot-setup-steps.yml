@@ -123,9 +123,21 @@ jobs:
 
       - name: Stage symbols into app/.alpackages and test/.alpackages
         run: |
-          # Use the workspace's existing symbol downloader so CI matches
-          # exactly what developers run locally.
-          ./scripts/download-symbols.sh
+          # bc-linux's manifest-driven resolver extracts the transitive
+          # dep closure directly from the downloaded BC artifact bundle,
+          # so symbols can be staged BEFORE `docker compose up -d` — no
+          # running BC required. scripts/download-symbols.sh (used by
+          # local dev) hits a live dev endpoint and therefore cannot run
+          # at this point in the CI pipeline.
+          mkdir -p .symbols app/.alpackages test/.alpackages
+          python3 bc-linux/scripts/stage-symbols.py \
+            --app-json app/app.json \
+            --app-json test/app.json \
+            --artifact-dir ".bc-artifacts/$BC_VERSION" \
+            --out-dir .symbols \
+            || true
+          cp .symbols/*.app app/.alpackages/
+          cp .symbols/*.app test/.alpackages/
           echo "app/.alpackages:  $(ls app/.alpackages/*.app 2>/dev/null | wc -l) .app files"
           echo "test/.alpackages: $(ls test/.alpackages/*.app 2>/dev/null | wc -l) .app files"
 
