@@ -57,7 +57,60 @@ export BC_VERSION BC_COUNTRY BC_TYPE BC_RUNNER_IMAGE AL_TOOL_VERSION \
        BC_LINUX_REF APP_DIRS TEST_APP_DIRS TEST_CODEUNIT_RANGE
 
 # -----------------------------------------------------------------------------
-# 2. Clone MsDyn365Bc.On.Linux into bc-linux/
+# 2. Install Docker if needed, then make sure the daemon is running
+# -----------------------------------------------------------------------------
+# On Copilot's ubuntu-latest runners this is implicit — Docker is
+# preinstalled and the daemon is up. Claude Code on the web sandboxes
+# aren't guaranteed to have either, so install + start here. Steps 4
+# (compose pull) and 10 (compose up) both need this.
+as_root() {
+  if [ "$(id -u)" = "0" ]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+if ! docker info >/dev/null 2>&1; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Installing Docker via get.docker.com"
+    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+    as_root sh /tmp/get-docker.sh
+    rm -f /tmp/get-docker.sh
+  fi
+
+  # Try the normal init paths first, then fall back to launching dockerd directly.
+  if command -v systemctl >/dev/null 2>&1 && \
+       as_root systemctl start docker 2>/dev/null; then
+    :
+  elif command -v service >/dev/null 2>&1 && \
+       as_root service docker start 2>/dev/null; then
+    :
+  else
+    echo "No init system detected — starting dockerd in the background"
+    as_root sh -c 'nohup dockerd > /var/log/dockerd.log 2>&1 &'
+  fi
+
+  # Wait up to 60s for the socket to accept connections.
+  for attempt in $(seq 1 60); do
+    if docker info >/dev/null 2>&1; then
+      echo "Docker daemon ready after ${attempt}s"
+      break
+    fi
+    sleep 1
+  done
+
+  docker info >/dev/null 2>&1 || {
+    echo "Docker daemon failed to start; last 50 log lines:"
+    as_root tail -50 /var/log/dockerd.log 2>/dev/null || true
+    exit 1
+  }
+else
+  echo "Docker daemon already running — skipping install"
+fi
+
+# -----------------------------------------------------------------------------
+# 3. Clone MsDyn365Bc.On.Linux into bc-linux/
 # -----------------------------------------------------------------------------
 if [ ! -d bc-linux/.git ]; then
   echo "Cloning StefanMaron/MsDyn365Bc.On.Linux ($BC_LINUX_REF) into bc-linux/"
@@ -68,7 +121,7 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# 3. Download BC artifacts + docker compose pull (parallel, with retries)
+# 4. Download BC artifacts + docker compose pull (parallel, with retries)
 # -----------------------------------------------------------------------------
 mkdir -p ".bc-artifacts/$BC_VERSION"
 
@@ -93,7 +146,7 @@ wait $ART_PID  || { echo "artifact download failed"; exit 1; }
 wait $PULL_PID || { echo "docker pull failed"; exit 1; }
 
 # -----------------------------------------------------------------------------
-# 4. Resolve selective keep-app set from consumer app.json files
+# 5. Resolve selective keep-app set from consumer app.json files
 # -----------------------------------------------------------------------------
 # Include bc-linux's own TestRunnerExtension app.json so its dep on
 # Microsoft Test Runner walks into the keep closure — without this
@@ -121,7 +174,7 @@ mkdir -p .bc-cache
 } > .bc-cache/env
 
 # -----------------------------------------------------------------------------
-# 5. Install .NET 8 SDK (idempotent)
+# 6. Install .NET 8 SDK (idempotent)
 # -----------------------------------------------------------------------------
 export DOTNET_ROOT="$HOME/.dotnet"
 export PATH="$DOTNET_ROOT:$DOTNET_ROOT/tools:$PATH"
@@ -150,7 +203,7 @@ fi
 } >> "$CLAUDE_ENV_FILE"
 
 # -----------------------------------------------------------------------------
-# 6. Install Linux AL compiler
+# 7. Install Linux AL compiler
 # -----------------------------------------------------------------------------
 if [ ! -x "$DOTNET_ROOT/tools/AL" ] && [ ! -x "$DOTNET_ROOT/tools/al" ]; then
   echo "Installing Microsoft.Dynamics.BusinessCentral.Development.Tools.Linux $AL_TOOL_VERSION"
@@ -169,7 +222,7 @@ if [ -x "$DOTNET_ROOT/tools/AL" ] && [ ! -e "$DOTNET_ROOT/tools/al" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# 7. Stage BC symbols into app/.alpackages and test/.alpackages
+# 8. Stage BC symbols into app/.alpackages and test/.alpackages
 # -----------------------------------------------------------------------------
 # stage-symbols.py reads the transitive dep closure directly from the
 # artifact bundle — no running BC needed.
@@ -186,7 +239,7 @@ echo "app/.alpackages:  $(ls app/.alpackages/*.app 2>/dev/null | wc -l) .app fil
 echo "test/.alpackages: $(ls test/.alpackages/*.app 2>/dev/null | wc -l) .app files"
 
 # -----------------------------------------------------------------------------
-# 8. Sanity-check that smoke.sh will find everything it needs
+# 9. Sanity-check that smoke.sh will find everything it needs
 # -----------------------------------------------------------------------------
 test -d bc-linux/scripts            || { echo "missing bc-linux/scripts"; exit 1; }
 test -d ".bc-artifacts/$BC_VERSION" || { echo "missing artifacts"; exit 1; }
@@ -197,7 +250,7 @@ test -f .bc-cache/env               || { echo "missing .bc-cache/env"; exit 1; }
 echo "Setup OK."
 
 # -----------------------------------------------------------------------------
-# 9. Boot BC and wait for healthy
+# 10. Boot BC and wait for healthy
 # -----------------------------------------------------------------------------
 # Propagate the resolved config into bc-linux/.env so any later
 # `docker compose up -d --wait` the agent runs sees identical config
