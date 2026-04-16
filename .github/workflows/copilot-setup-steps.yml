@@ -118,7 +118,13 @@ jobs:
         run: |
           dotnet tool install -g \
             Microsoft.Dynamics.BusinessCentral.Development.Tools.Linux \
-            --version "$AL_TOOL_VERSION" 2>/dev/null || true
+            --version "$AL_TOOL_VERSION"
+          # The tool's shim name varies by version: recent packages install
+          # as uppercase `AL`, older ones as lowercase `al`. smoke.sh calls
+          # `al compile`, so ensure the lowercase name resolves regardless.
+          if [ -x "$HOME/.dotnet/tools/AL" ] && [ ! -e "$HOME/.dotnet/tools/al" ]; then
+            ln -s AL "$HOME/.dotnet/tools/al"
+          fi
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
       - name: Stage symbols into app/.alpackages and test/.alpackages
