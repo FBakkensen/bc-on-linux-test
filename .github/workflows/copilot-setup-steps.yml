@@ -177,6 +177,11 @@ jobs:
             echo "BC_ARTIFACTS_DIR=$PWD/.bc-artifacts/$BC_VERSION"
           } >> bc-linux/.env
           cd bc-linux
-          docker compose up -d --wait
+          docker compose up -d
+          # Use bc-linux's canonical readiness helper. Emits one progress
+          # line per minute (not a per-frame spinner), fails fast on
+          # `unhealthy`, and is the same script the upstream reusable
+          # workflows use — bug fixes there propagate to us for free.
+          ./scripts/wait-for-bc-healthy.sh
           echo "BC is healthy. Current status:"
           docker compose ps
