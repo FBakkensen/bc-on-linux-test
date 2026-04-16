@@ -177,6 +177,6 @@ jobs:
             echo "BC_ARTIFACTS_DIR=$PWD/.bc-artifacts/$BC_VERSION"
           } >> bc-linux/.env
           cd bc-linux
-          docker compose up -d --progress=plain --wait
+          docker compose up -d --wait
           echo "BC is healthy. Current status:"
           docker compose ps
