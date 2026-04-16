@@ -133,11 +133,23 @@ missing `.al` file; check your `git status` carefully.
 - **`smoke.sh` says "Checking Business Central availability..." and
   fails on curl**: BC isn't up yet. Run
   `(cd bc-linux && docker compose up -d --wait)` and retry.
-- **AL compile fails on a missing symbol**: the symbol isn't staged in
-  the relevant `.alpackages/`. Re-run `./scripts/download-symbols.sh`.
+- **AL compile fails on a missing symbol**: your `.alpackages/` is
+  missing the symbol. Re-run the CI-path staging directly from the BC
+  artifact bundle (no running BC needed):
+  ```bash
+  python3 bc-linux/scripts/stage-symbols.py \
+      --app-json app/app.json --app-json test/app.json \
+      --artifact-dir ".bc-artifacts/$(ls .bc-artifacts | head -1)" \
+      --out-dir .symbols
+  cp .symbols/*.app app/.alpackages/
+  cp .symbols/*.app test/.alpackages/
+  ```
   If the symbol still isn't there, the BC artifact didn't ship it for
   this version/country combination — pick a different API or add the
-  missing module to `dependencies` in `app.json`.
+  missing module to `dependencies` in `app.json`. Do **not** run
+  `./scripts/download-symbols.sh` here — that's a local-dev tool which
+  hits a running BC dev endpoint and is the wrong path in this
+  environment.
 - **A test fails with a message you don't understand**: re-read the
   test, the production code, and the assertion message together. Do
   *not* delete or skip the test — fix the underlying issue.
@@ -145,6 +157,15 @@ missing `.al` file; check your `git status` carefully.
   depend on wasn't kept in the selective filter. Verify the `dependencies`
   array in `app.json` / `test/app.json` is correct, then restart BC so
   the entrypoint re-resolves the keep set.
+
+## Known pitfalls
+
+- **AL runtime / compiler pairing.** Both `app.json` files declare a
+  `runtime` value that the pinned AL compiler must support. The CI pins
+  AL `16.2.28.57946` (`.github/workflows/copilot-setup-steps.yml`).
+  Runtime `16.0` works; `16.1` fails with AL1043. If you need a newer
+  runtime, bump `AL_TOOL_VERSION` in `copilot-setup-steps.yml` in the
+  same PR as the `app.json` change — the two are coupled.
 
 ## The point of all this
 

@@ -157,18 +157,26 @@ jobs:
           test -f .bc-cache/env               || { echo "missing .bc-cache/env"; exit 1; }
           echo "Setup OK. Agent can now run ./scripts/smoke.sh"
 
-      - name: Start BC in the background (fire-and-forget)
-        # Start BC NOW so it boots in parallel with the agent's "thinking"
-        # phase. `docker compose up -d` returns immediately. BC's entrypoint
-        # then takes ~3-5 minutes to fully boot in the background. If BC
-        # isn't ready when the agent first calls ./scripts/smoke.sh, the
-        # instructions tell it to run `docker compose up -d --wait`.
+      - name: Start BC and wait for it to be healthy
+        # Block until BC is healthy so the agent's first ./scripts/smoke.sh
+        # call doesn't race an un-booted service (cost ~2 min of wasted
+        # agent time per run). Setup-job wall clock is billed separately
+        # from the agent's 30-min budget, so this trade is pure win.
+        #
+        # The env values from .bc-cache/env are also appended to
+        # bc-linux/.env so any later `docker compose up -d --wait` the
+        # agent runs (e.g. during recovery) sees identical config — no
+        # container recreation, no artifact re-download, no firewall block.
         run: |
           set -a
           # shellcheck disable=SC1091
           . .bc-cache/env
           set +a
+          {
+            cat .bc-cache/env
+            echo "BC_ARTIFACTS_DIR=$PWD/.bc-artifacts/$BC_VERSION"
+          } >> bc-linux/.env
           cd bc-linux
-          docker compose up -d
-          echo "BC boot launched in background. Current status:"
+          docker compose up -d --progress=plain --wait
+          echo "BC is healthy. Current status:"
           docker compose ps
