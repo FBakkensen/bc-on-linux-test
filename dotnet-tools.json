@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "msdyn365bc.al.runner": {
+      "version": "1.0.16",
+      "commands": [
+        "al-runner"
+      ],
+      "rollForward": false
+    }
+  }
+}
