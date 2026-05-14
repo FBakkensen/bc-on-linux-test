@@ -10,6 +10,24 @@ codeunit 50001 "BC Event Source" implements "IEventSource"
         CollectServiceLineEvents(Item, EventBuf);
         CollectProdOrderEvents(Item, EventBuf);
         CollectAssemblyEvents(Item, EventBuf);
+        CollectJobPlanningEvents(Item, EventBuf);
+    end;
+
+    local procedure CollectJobPlanningEvents(var Item: Record Item; var EventBuf: Record "Max Sellable Event Buf" temporary)
+    var
+        JPL: Record "Job Planning Line";
+    begin
+        // ADR 0001 deviation #3: replicate BC's "no Line Type filter" behaviour. A line
+        // tagged Both Budget and Billable contributes once as the Budget leg and once
+        // as the Billable leg — counted twice on purpose so Max Sellable stays in lock
+        // step with BC's own Job availability views rather than de-duping in our code.
+        JPL.FilterLinesWithItemToPlan(Item);
+        if JPL.FindSet() then
+            repeat
+                AppendEvent(EventBuf, JPL."Planning Date", -JPL."Remaining Qty. (Base)");
+                if JPL."Line Type" = JPL."Line Type"::"Both Budget and Billable" then
+                    AppendEvent(EventBuf, JPL."Planning Date", -JPL."Remaining Qty. (Base)");
+            until JPL.Next() = 0;
     end;
 
     local procedure CollectAssemblyEvents(var Item: Record Item; var EventBuf: Record "Max Sellable Event Buf" temporary)
