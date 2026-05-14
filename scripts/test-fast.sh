@@ -17,6 +17,7 @@ mkdir -p "$BUILD_DIR"
 exec al-runner \
     --packages "$PACKAGE_CACHE" \
     --output-junit "$JUNIT_OUTPUT" \
+    --test-isolation method \
     "$ROOT_DIR/app/src" \
     "$ROOT_DIR/test/src" \
     "$@"

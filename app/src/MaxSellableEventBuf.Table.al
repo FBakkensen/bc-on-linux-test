@@ -29,5 +29,8 @@ table 50001 "Max Sellable Event Buf"
         {
             Clustered = true;
         }
+        key(ByEventDate; "Event Date")
+        {
+        }
     }
 }
