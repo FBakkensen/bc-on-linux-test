@@ -11,7 +11,16 @@ INTEGRATION_TEST_PACKAGE="$BUILD_DIR/BcLinuxSmokeIntegrationTests.app"
 BASE_URL="${BC_BASE_URL:-http://localhost:7048/BC}"
 DEV_URL="${BC_DEV_URL:-http://localhost:7049/BC/dev}"
 AUTH="${BC_AUTH:-BCRUNNER:Admin123!}"
-CODEUNIT_RANGE="${BC_TEST_CODEUNIT_RANGE:-50150..50199}"
+# Stress-scale perf test (codeunit 50161) is opt-in — gated by BC_PERF_STRESS=1
+# per ADR 0004 so local cycles stay under a minute. CI sets the flag; local devs
+# get the typical-scale perf budget (50160) every run and the stress envelope on
+# demand.
+if [[ "${BC_PERF_STRESS:-0}" == "1" ]]; then
+    DEFAULT_RANGE="50150..50161"
+else
+    DEFAULT_RANGE="50150..50160"
+fi
+CODEUNIT_RANGE="${BC_TEST_CODEUNIT_RANGE:-$DEFAULT_RANGE}"
 
 mkdir -p "$BUILD_DIR" "$PACKAGE_CACHE"
 
