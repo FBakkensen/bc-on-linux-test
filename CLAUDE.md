@@ -65,3 +65,17 @@ The smoke pipeline is a fixed sequence in [`scripts/smoke.sh`](scripts/smoke.sh)
 Open [`bc-on-linux-test.code-workspace`](bc-on-linux-test.code-workspace) at the repo root — a multi-root workspace with `app/` and `test/` as folders. The workspace settings point `al.packageCachePath` at the shared `../.alpackages/` and wire `al.codeAnalyzers` to the Microsoft analyzers (`CodeCop`, `UICop`, `PerTenantExtensionCop`) plus the ALCops set (`Common`, `LinterCop`, `ApplicationCop`, `FormattingCop`, `PlatformCop`, `DocumentationCop`, `TestAutomationCop`). Recommended extensions are `ms-dynamics-smb.al` and `arthurvdv.alcops` — the latter auto-downloads the ALCops analyzer DLLs from the [`ALCops.Analyzers`](https://www.nuget.org/packages/ALCops.Analyzers) NuGet package into the AL extension's `bin/Analyzers/` folder on first activation. If you need them without launching VS Code (e.g. a fresh CLI-only setup), pull the `lib/net8.0/` DLLs from that NuGet package into the same folder by hand.
 
 Each AL project has its own `.vscode/launch.json` with a `BC Linux` profile pointed at the local dev endpoint. For F5 publish, use `BCRUNNER` / `Admin123!`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`FBakkensen/bc-on-linux-test`). Use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical role names used verbatim (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — one `CONTEXT.md` + `docs/adr/` at the repo root (neither exists yet; produced lazily by `/grill-with-docs`). See `docs/agents/domain.md`.
