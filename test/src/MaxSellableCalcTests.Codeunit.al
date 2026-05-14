@@ -399,4 +399,37 @@ codeunit 50100 "Max Sellable Calc Tests"
         // THEN 60 base / 6 per-pack = 10 packs in the line's UoM
         Assert.AreEqual(10, Result, 'Calculate must convert base UoM back to the line UoM.');
     end;
+
+    [Test]
+    procedure CalculateIsSideEffectFreeForPBT()
+    var
+        Item: Record Item;
+        ExcludingSalesLine: Record "Sales Line";
+        MaxSellableCalc: Codeunit "Max Sellable Calc";
+        EventSourceStub: Codeunit "Event Source Stub";
+        StockoutCheckerStub: Codeunit "Stockout Checker Stub";
+        NotificationDispatcherStub: Codeunit "Notification Dispatcher Stub";
+        EventSource: Interface "IEventSource";
+        StockoutChecker: Interface "IStockoutChecker";
+        NotificationDispatcher: Interface "INotificationDispatcher";
+    begin
+        // Calculate must not raise notifications, write data, or otherwise leak side
+        // effects — PBT runs it in a UI-restricted session where any of those would
+        // crash the background task. Pinning that invariant here so it can't regress.
+        WorkDate(DMY2Date(15, 1, 2026));
+
+        Item.Init();
+        Item."No." := 'ITEM-A';
+        Item.Insert();
+
+        EventSource := EventSourceStub;
+        StockoutChecker := StockoutCheckerStub;
+        NotificationDispatcher := NotificationDispatcherStub;
+
+        MaxSellableCalc.Calculate(
+            'ITEM-A', '', '', WorkDate(), ExcludingSalesLine,
+            EventSource, StockoutChecker, NotificationDispatcher);
+
+        Assert.AreEqual(0, NotificationDispatcherStub.GetDispatchCount(), 'Calculate must not dispatch notifications — PBT-safe.');
+    end;
 }
