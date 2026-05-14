@@ -2,15 +2,17 @@
 .build/
 *.app
 
-# AL symbol caches
-app/.alpackages/
-test/.alpackages/
+# AL symbol cache (shared by app/ and test/ via al.packageCachePath)
+/.alpackages/
 
 # AL / VS Code AL extension generated
 .vscode/.alcache/
 .vscode/.alpackages/
 **/.snapshots/
 **/rad.json
+
+# al-compile (al-smart-compile) per-project diagnostics
+**/.dev/
 
 # Upstream BC runtime checkout — separate clone of StefanMaron/MsDyn365Bc.On.Linux
 bc-linux/

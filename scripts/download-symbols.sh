@@ -5,8 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DEV_URL="${BC_DEV_URL:-http://localhost:7049/BC/dev}"
 AUTH="${BC_AUTH:-BCRUNNER:Admin123!}"
 TARGETS=(
-    "$ROOT_DIR/app/.alpackages"
-    "$ROOT_DIR/test/.alpackages"
+    "$ROOT_DIR/.alpackages"
 )
 APPS=(
     "System"
@@ -14,6 +13,7 @@ APPS=(
     "Business Foundation"
     "Base Application"
     "Application"
+    "Library Assert"
 )
 
 urlencode() {

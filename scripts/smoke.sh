@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/.build"
 APP_PROJECT="$ROOT_DIR/app"
 TEST_PROJECT="$ROOT_DIR/test"
+PACKAGE_CACHE="$ROOT_DIR/.alpackages"
 APP_PACKAGE="$BUILD_DIR/BcLinuxSmoke.app"
 TEST_PACKAGE="$BUILD_DIR/BcLinuxSmokeTests.app"
 BASE_URL="${BC_BASE_URL:-http://localhost:7048/BC}"
@@ -12,21 +13,21 @@ DEV_URL="${BC_DEV_URL:-http://localhost:7049/BC/dev}"
 AUTH="${BC_AUTH:-BCRUNNER:Admin123!}"
 CODEUNIT_RANGE="${BC_TEST_CODEUNIT_RANGE:-50100..50149}"
 
-mkdir -p "$BUILD_DIR" "$APP_PROJECT/.alpackages" "$TEST_PROJECT/.alpackages"
+mkdir -p "$BUILD_DIR" "$PACKAGE_CACHE"
 
 echo "Checking Business Central availability..."
 curl -sf -u "$AUTH" "${BASE_URL}/ODataV4/Company" >/dev/null
 
 echo "Compiling production app..."
 al compile "/project:$APP_PROJECT" \
-    "/packagecachepath:$APP_PROJECT/.alpackages" \
+    "/packagecachepath:$PACKAGE_CACHE" \
     "/out:$APP_PACKAGE"
 
-cp "$APP_PACKAGE" "$TEST_PROJECT/.alpackages/"
+cp "$APP_PACKAGE" "$PACKAGE_CACHE/"
 
 echo "Compiling test app..."
 al compile "/project:$TEST_PROJECT" \
-    "/packagecachepath:$TEST_PROJECT/.alpackages" \
+    "/packagecachepath:$PACKAGE_CACHE" \
     "/out:$TEST_PACKAGE"
 
 echo "Publishing production app..."

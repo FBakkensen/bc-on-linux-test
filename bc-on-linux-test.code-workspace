@@ -1,0 +1,36 @@
+{
+    "folders": [
+        { "name": "app",  "path": "app" },
+        { "name": "test", "path": "test" }
+    ],
+    "extensions": {
+        "recommendations": [
+            "ms-dynamics-smb.al",
+            "arthurvdv.alcops"
+        ]
+    },
+    "settings": {
+        "al.enableCodeAnalysis": true,
+        "al.codeAnalyzers": [
+            "${CodeCop}",
+            "${UICop}",
+            "${PerTenantExtensionCop}",
+            "${analyzerfolder}ALCops.Common.dll",
+            "${analyzerfolder}ALCops.LinterCop.dll",
+            "${analyzerfolder}ALCops.ApplicationCop.dll",
+            "${analyzerfolder}ALCops.FormattingCop.dll",
+            "${analyzerfolder}ALCops.PlatformCop.dll",
+            "${analyzerfolder}ALCops.DocumentationCop.dll",
+            "${analyzerfolder}ALCops.TestAutomationCop.dll"
+        ],
+        "al.incrementalBuild": true,
+        "al.packageCachePath": "../.alpackages",
+        "editor.formatOnSave": true,
+        "[al]": {
+            "editor.defaultFormatter": "ms-dynamics-smb.al",
+            "editor.formatOnSave": true
+        },
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true
+    }
+}
