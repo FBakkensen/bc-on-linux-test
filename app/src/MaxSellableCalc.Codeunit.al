@@ -23,7 +23,10 @@ codeunit 50000 "Max Sellable Calc"
         FloorDate := FloorOf(ShipmentDate);
         Balance := StartingOnHandAt(ItemNo, VariantCode, LocationCode, FloorDate);
 
-        if Item.Get(ItemNo) then;
+        if Item.Get(ItemNo) then begin
+            Item.SetRange("Variant Filter", VariantCode);
+            Item.SetRange("Location Filter", LocationCode);
+        end;
         EventSource.CollectEvents(Item, ExcludingSalesLine, EventBuf);
         Projected := MinWalk(EventBuf, Balance);
         if Projected < 0 then
