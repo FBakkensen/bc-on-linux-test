@@ -8,6 +8,26 @@ codeunit 50001 "BC Event Source" implements "IEventSource"
         CollectPurchaseLineEvents(Item, EventBuf);
         CollectTransferLineEvents(Item, EventBuf);
         CollectServiceLineEvents(Item, EventBuf);
+        CollectProdOrderEvents(Item, EventBuf);
+    end;
+
+    local procedure CollectProdOrderEvents(var Item: Record Item; var EventBuf: Record "Max Sellable Event Buf" temporary)
+    var
+        ProdOrderLine: Record "Prod. Order Line";
+        ProdOrderComp: Record "Prod. Order Component";
+    begin
+        // ADR 0001 deviation #1: IncludeFirmPlanned=true → Planned + Firm Planned + Released.
+        ProdOrderLine.FilterLinesWithItemToPlan(Item, true);
+        if ProdOrderLine.FindSet() then
+            repeat
+                AppendEvent(EventBuf, ProdOrderLine."Due Date", ProdOrderLine."Remaining Qty. (Base)");
+            until ProdOrderLine.Next() = 0;
+
+        ProdOrderComp.FilterLinesWithItemToPlan(Item, true);
+        if ProdOrderComp.FindSet() then
+            repeat
+                AppendEvent(EventBuf, ProdOrderComp."Due Date", -ProdOrderComp."Remaining Qty. (Base)");
+            until ProdOrderComp.Next() = 0;
     end;
 
     local procedure CollectServiceLineEvents(var Item: Record Item; var EventBuf: Record "Max Sellable Event Buf" temporary)
