@@ -9,6 +9,28 @@ codeunit 50001 "BC Event Source" implements "IEventSource"
         CollectTransferLineEvents(Item, EventBuf);
         CollectServiceLineEvents(Item, EventBuf);
         CollectProdOrderEvents(Item, EventBuf);
+        CollectAssemblyEvents(Item, EventBuf);
+    end;
+
+    local procedure CollectAssemblyEvents(var Item: Record Item; var EventBuf: Record "Max Sellable Event Buf" temporary)
+    var
+        AsmHeader: Record "Assembly Header";
+        AsmLine: Record "Assembly Line";
+    begin
+        // ADR 0001 deviation #2: Document Type = Order only. Blanket Assembly headers
+        // and lines are excluded — Max Sellable follows the Qty. on Asm. Component
+        // FlowField, not CU 99000854's special-case for blanket components.
+        AsmHeader.SetItemToPlanFilters(Item, AsmHeader."Document Type"::Order);
+        if AsmHeader.FindSet() then
+            repeat
+                AppendEvent(EventBuf, AsmHeader."Due Date", AsmHeader."Remaining Quantity (Base)");
+            until AsmHeader.Next() = 0;
+
+        AsmLine.SetItemToPlanFilters(Item, AsmLine."Document Type"::Order);
+        if AsmLine.FindSet() then
+            repeat
+                AppendEvent(EventBuf, AsmLine."Due Date", -AsmLine."Remaining Quantity (Base)");
+            until AsmLine.Next() = 0;
     end;
 
     local procedure CollectProdOrderEvents(var Item: Record Item; var EventBuf: Record "Max Sellable Event Buf" temporary)
