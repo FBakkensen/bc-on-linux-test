@@ -1,7 +1,8 @@
 {
     "folders": [
-        { "name": "app",  "path": "app" },
-        { "name": "test", "path": "test" }
+        { "name": "app",              "path": "app" },
+        { "name": "test",             "path": "test" },
+        { "name": "integration-test", "path": "integration-test" }
     ],
     "extensions": {
         "recommendations": [

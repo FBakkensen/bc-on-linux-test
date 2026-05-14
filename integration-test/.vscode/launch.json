@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "BC Linux",
+      "type": "al",
+      "request": "launch",
+      "server": "http://localhost",
+      "serverInstance": "BC",
+      "port": 7049,
+      "authentication": "UserPassword",
+      "startupObjectId": 22,
+      "startupObjectType": "Page",
+      "breakOnError": "All",
+      "launchBrowser": false,
+      "enableLongRunningSqlStatements": true,
+      "enableSqlInformationDebugger": true
+    }
+  ]
+}
