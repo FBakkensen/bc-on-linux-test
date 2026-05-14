@@ -5,6 +5,54 @@ codeunit 50001 "BC Event Source" implements "IEventSource"
     procedure CollectEvents(var Item: Record Item; var ExcludingSalesLine: Record "Sales Line"; var EventBuf: Record "Max Sellable Event Buf" temporary)
     begin
         CollectSalesLineEvents(Item, ExcludingSalesLine, EventBuf);
+        CollectPurchaseLineEvents(Item, EventBuf);
+        CollectTransferLineEvents(Item, EventBuf);
+        CollectServiceLineEvents(Item, EventBuf);
+    end;
+
+    local procedure CollectServiceLineEvents(var Item: Record Item; var EventBuf: Record "Max Sellable Event Buf" temporary)
+    var
+        ServiceLine: Record "Service Line";
+    begin
+        ServiceLine.FilterLinesWithItemToPlan(Item);
+        if ServiceLine.FindSet() then
+            repeat
+                AppendEvent(EventBuf, ServiceLine."Needed by Date", -ServiceLine."Outstanding Qty. (Base)");
+            until ServiceLine.Next() = 0;
+    end;
+
+    local procedure CollectTransferLineEvents(var Item: Record Item; var EventBuf: Record "Max Sellable Event Buf" temporary)
+    var
+        TransferLine: Record "Transfer Line";
+    begin
+        TransferLine.FilterLinesWithItemToPlan(Item, true, false);
+        if TransferLine.FindSet() then
+            repeat
+                AppendEvent(EventBuf, TransferLine."Receipt Date", TransferLine."Outstanding Qty. (Base)");
+            until TransferLine.Next() = 0;
+
+        TransferLine.FilterLinesWithItemToPlan(Item, false, false);
+        if TransferLine.FindSet() then
+            repeat
+                AppendEvent(EventBuf, TransferLine."Shipment Date", -TransferLine."Outstanding Qty. (Base)");
+            until TransferLine.Next() = 0;
+    end;
+
+    local procedure CollectPurchaseLineEvents(var Item: Record Item; var EventBuf: Record "Max Sellable Event Buf" temporary)
+    var
+        PurchLine: Record "Purchase Line";
+    begin
+        PurchLine.FilterLinesWithItemToPlan(Item, PurchLine."Document Type"::Order);
+        if PurchLine.FindSet() then
+            repeat
+                AppendEvent(EventBuf, PurchLine."Expected Receipt Date", PurchLine."Outstanding Qty. (Base)");
+            until PurchLine.Next() = 0;
+
+        PurchLine.FilterLinesWithItemToPlan(Item, PurchLine."Document Type"::"Return Order");
+        if PurchLine.FindSet() then
+            repeat
+                AppendEvent(EventBuf, PurchLine."Expected Receipt Date", -PurchLine."Outstanding Qty. (Base)");
+            until PurchLine.Next() = 0;
     end;
 
     local procedure CollectSalesLineEvents(var Item: Record Item; var ExcludingSalesLine: Record "Sales Line"; var EventBuf: Record "Max Sellable Event Buf" temporary)
