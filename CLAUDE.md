@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A local AL development workspace that runs Microsoft Dynamics 365 Business Central on Linux for compile + test execution. The runtime itself lives in [`bc-linux/`](bc-linux/), a checkout of upstream [`StefanMaron/MsDyn365Bc.On.Linux`](https://github.com/StefanMaron/MsDyn365Bc.On.Linux) — do not edit it as a normal source dependency; it has its own `CLAUDE.md` describing how the BC service tier is patched at runtime via `DOTNET_STARTUP_HOOKS`. The three AL projects are [`app/`](app/) (production), [`test/`](test/) (unit tests, stub-based via al-runner — no container), and [`integration-test/`](integration-test/) (integration tests run inside the BC container).
 
+## Per-subfolder context
+
+[`app/`](app/CLAUDE.md), [`test/`](test/CLAUDE.md), and [`integration-test/`](integration-test/CLAUDE.md) each carry their own `CLAUDE.md` with hyper-local rules (folder-specific ID ranges, stub vs real-BC conventions, runner constraints, naming patterns). They load on-demand when Claude touches files in those folders — this root file stays canonical for repo-wide concerns.
+
 ## Common commands
 
 All paths below are relative to the workspace root.
