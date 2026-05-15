@@ -3,10 +3,10 @@ name: BC Tests
 # Validation CI for this workspace. Runs on every push / PR.
 #
 # This is a thin consumer of the reusable workflow hosted in
-# StefanMaron/MsDyn365Bc.On.Linux. It does the same thing as smoke.sh
+# StefanMaron/MsDyn365Bc.On.Linux. It does the same thing as test-integration.sh
 # (compile + publish + run tests against a real BC Linux container) but
 # from a clean GitHub Actions runner — independent validation of whatever
-# the Copilot agent committed in its smoke.sh-driven inner loop.
+# the Copilot agent committed in its test-integration.sh-driven inner loop.
 
 on:
   push:

@@ -6,9 +6,13 @@ This workspace is a local consumer setup for running Business Central on Linux f
 
 - [`bc-linux/`](/home/fbakkensen/repos/bc-on-linux-test/bc-linux): upstream Linux BC runtime, Docker Compose stack, and test runner scripts
 - [`app/`](/home/fbakkensen/repos/bc-on-linux-test/app): minimal production AL app
-- [`test/`](/home/fbakkensen/repos/bc-on-linux-test/test): minimal AL test app that depends on `app/`
-- [`scripts/download-symbols.sh`](/home/fbakkensen/repos/bc-on-linux-test/scripts/download-symbols.sh): pulls Microsoft symbol packages into both AL projects
-- [`scripts/smoke.sh`](/home/fbakkensen/repos/bc-on-linux-test/scripts/smoke.sh): terminal-first compile, publish, and test flow
+- [`test/`](/home/fbakkensen/repos/bc-on-linux-test/test): AL unit tests (al-runner, stub-based, no container)
+- [`integration-test/`](/home/fbakkensen/repos/bc-on-linux-test/integration-test): AL integration tests (run inside the BC container)
+- [`scripts/download-symbols.sh`](/home/fbakkensen/repos/bc-on-linux-test/scripts/download-symbols.sh): pulls Microsoft symbol packages into `.alpackages/`
+- [`scripts/compile.sh`](/home/fbakkensen/repos/bc-on-linux-test/scripts/compile.sh): compiles AL projects with full analyzer set
+- [`scripts/test-unit.sh`](/home/fbakkensen/repos/bc-on-linux-test/scripts/test-unit.sh): fast unit-test loop (compile + al-runner)
+- [`scripts/test-integration.sh`](/home/fbakkensen/repos/bc-on-linux-test/scripts/test-integration.sh): full BC-tier compile, publish, and test flow
+- [`scripts/test-mutation.sh`](/home/fbakkensen/repos/bc-on-linux-test/scripts/test-mutation.sh): AL mutation testing via al-mutate
 
 ## Prerequisites
 
@@ -50,29 +54,34 @@ From the workspace root:
 ./scripts/download-symbols.sh
 ```
 
-This fills:
+This fills the shared `.alpackages/` at the repo root.
 
-- `app/.alpackages/`
-- `test/.alpackages/`
-
-## Run the smoke flow
+## Run the integration test flow
 
 From the workspace root:
 
 ```bash
-./scripts/smoke.sh
+./scripts/test-integration.sh
 ```
 
 The script will:
 
 1. verify the BC instance is running
-2. compile the production app to `.build/BcLinuxSmoke.app`
-3. copy the production `.app` into `test/.alpackages/`
-4. compile the test app to `.build/BcLinuxSmokeTests.app`
-5. publish the production app
-6. publish the test app through `bc-linux/scripts/run-tests.sh`
-7. execute the test codeunits in the `50100..50149` range
-8. write JUnit XML to `.build/test-results.xml`
+2. run `./scripts/compile.sh` (all three projects, full analyzers)
+3. publish the production app to the dev endpoint
+4. publish the integration test app through `bc-linux/scripts/run-tests.sh`
+5. execute the test codeunits in the `50150..50160` range (set `BC_PERF_STRESS=1` to include 50161)
+6. write JUnit XML to `.build/test-integration.xml`
+
+## Run the fast unit-test loop
+
+No BC container required:
+
+```bash
+./scripts/test-unit.sh
+```
+
+Compiles `app/` + `test/` with full analyzers, then runs unit tests via al-runner. JUnit lands at `.build/test-unit.xml`.
 
 ## VS Code
 
@@ -90,9 +99,6 @@ For a VS Code-first flow:
 
 ## Environment overrides
 
-Both scripts honor these optional environment variables:
-
-- `BC_BASE_URL`
-- `BC_DEV_URL`
-- `BC_AUTH`
-- `BC_TEST_CODEUNIT_RANGE` (smoke script only)
+- `BC_BASE_URL`, `BC_DEV_URL`, `BC_AUTH` — honored by `download-symbols.sh` and `test-integration.sh`
+- `BC_TEST_CODEUNIT_RANGE` — `test-integration.sh` only
+- `BC_PERF_STRESS=1` — `test-integration.sh` includes the stress-scale perf test (codeunit 50161); see [`docs/adr/0004-perf-testing-approach.md`](/home/fbakkensen/repos/bc-on-linux-test/docs/adr/0004-perf-testing-approach.md)

@@ -2,7 +2,7 @@ name: Copilot Setup Steps
 
 # Runs once before GitHub Copilot's coding agent starts working on a task
 # in this repo. Its job is to bring the runner to a state where the agent
-# can run `./scripts/smoke.sh` and get a fast inner loop against a real
+# can run `./scripts/test-integration.sh` and get a fast inner loop against a real
 # Business Central instance.
 #
 # What this does:
@@ -120,7 +120,7 @@ jobs:
             Microsoft.Dynamics.BusinessCentral.Development.Tools.Linux \
             --version "$AL_TOOL_VERSION"
           # The tool's shim name varies by version: recent packages install
-          # as uppercase `AL`, older ones as lowercase `al`. smoke.sh calls
+          # as uppercase `AL`, older ones as lowercase `al`. test-integration.sh calls
           # `al compile`, so ensure the lowercase name resolves regardless.
           if [ -x "$HOME/.dotnet/tools/AL" ] && [ ! -e "$HOME/.dotnet/tools/al" ]; then
             ln -s AL "$HOME/.dotnet/tools/al"
@@ -147,7 +147,7 @@ jobs:
           echo "app/.alpackages:  $(ls app/.alpackages/*.app 2>/dev/null | wc -l) .app files"
           echo "test/.alpackages: $(ls test/.alpackages/*.app 2>/dev/null | wc -l) .app files"
 
-      - name: Smoke test — does smoke.sh see everything it needs?
+      - name: Smoke test — does test-integration.sh see everything it needs?
         run: |
           test -d bc-linux/scripts           || { echo "missing bc-linux/scripts"; exit 1; }
           test -d ".bc-artifacts/$BC_VERSION" || { echo "missing artifacts"; exit 1; }
@@ -155,10 +155,10 @@ jobs:
           test -d test/.alpackages            || { echo "missing test symbols"; exit 1; }
           command -v al >/dev/null            || { echo "AL compiler not on PATH"; exit 1; }
           test -f .bc-cache/env               || { echo "missing .bc-cache/env"; exit 1; }
-          echo "Setup OK. Agent can now run ./scripts/smoke.sh"
+          echo "Setup OK. Agent can now run ./scripts/test-integration.sh"
 
       - name: Start BC and wait for it to be healthy
-        # Block until BC is healthy so the agent's first ./scripts/smoke.sh
+        # Block until BC is healthy so the agent's first ./scripts/test-integration.sh
         # call doesn't race an un-booted service (cost ~2 min of wasted
         # agent time per run). Setup-job wall clock is billed separately
         # from the agent's 30-min budget, so this trade is pure win.

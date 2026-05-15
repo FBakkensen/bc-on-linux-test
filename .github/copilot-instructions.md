@@ -21,7 +21,7 @@ Before you started, the `copilot-setup-steps.yml` workflow already:
 - Resolved which baseline BC apps to keep in the database and wrote them
   to `.bc-cache/env`.
 - Fired `docker compose up -d` on the BC stack. By the time you run
-  `./scripts/smoke.sh` for the first time, BC is usually healthy or
+  `./scripts/test-integration.sh` for the first time, BC is usually healthy or
   nearly so. If it isn't, wait ~1–2 minutes and retry — the container
   stays up for the rest of your session.
 
@@ -30,14 +30,20 @@ Before you started, the `copilot-setup-steps.yml` workflow already:
 The only command you need:
 
 ```bash
-./scripts/smoke.sh
+./scripts/test-integration.sh
 ```
 
-This compiles `app/`, then `test/` (with `app/` as a dependency),
-publishes both `.app` files to the running BC instance via the dev
-endpoint, and runs every `[Test]` codeunit in the `50100..50149` range
-through the BC test runner. Results land in `.build/test-results.xml`
-(JUnit).
+This compiles all three projects (`app/`, `test/`, `integration-test/`)
+with the full analyzer set via `./scripts/compile.sh`, publishes the
+production app and the integration test app to the running BC instance
+via the dev endpoint, and runs every `[Test]` codeunit in the
+`50150..50160` range (integration tests) through the BC test runner.
+Results land in `.build/test-integration.xml` (JUnit).
+
+For pure-logic changes you can also use `./scripts/test-unit.sh` — it
+compiles `app/` + `test/` with analyzers and runs the unit tests in
+`/test/` via al-runner out-of-process (no BC traffic). Output:
+`.build/test-unit.xml`.
 
 **Run it after every meaningful edit.** Read the output. If compilation
 fails, fix the AL. If a test fails, read the assertion message and fix
@@ -55,7 +61,7 @@ booting. Bring it up and wait:
 Narrow the test slice while iterating:
 
 ```bash
-BC_TEST_CODEUNIT_RANGE=50100..50100 ./scripts/smoke.sh
+BC_TEST_CODEUNIT_RANGE=50150..50150 ./scripts/test-integration.sh
 ```
 
 ## What NOT to do
@@ -73,10 +79,10 @@ BC_TEST_CODEUNIT_RANGE=50100..50100 ./scripts/smoke.sh
   entrypoint clears the Microsoft test framework apps on first boot and
   only reinstalls them when that var is non-empty. Blanking it breaks
   the test publish on the next cold start.
-- **Do not add new top-level `app/` or `test/` directories.** The CI
-  workflow `.github/workflows/bc-test.yml` and `scripts/smoke.sh` are
-  both hard-coded to compile `app/` and `test/`; changing the layout
-  means changing both.
+- **Do not add new top-level `app/`, `test/`, or `integration-test/`
+  directories.** The CI workflow `.github/workflows/bc-test.yml`,
+  `scripts/compile.sh`, and `scripts/test-integration.sh` all know about
+  this three-project layout; changing it means changing every reference.
 - **Do not commit `.app` files**, dependency caches (`.alpackages/`),
   or anything in `.build/`. These are reproducible from source and
   already gitignored.
@@ -87,16 +93,22 @@ BC_TEST_CODEUNIT_RANGE=50100..50100 ./scripts/smoke.sh
 app/                  ← production AL code, ID range 50000..50049
   app.json            ← extension manifest
   src/                ← .al files (objects)
-test/                 ← test AL code, ID range 50100..50149
-  app.json            ← test extension manifest, depends on app/
+test/                 ← unit test AL code (al-runner, no container), ID range 50100..50149
+  app.json            ← unit test manifest, depends on app/
+  src/                ← .al test codeunits ([Test] procedures)
+integration-test/     ← integration test AL code (runs in container), ID range 50150..50160
+  app.json            ← integration test manifest, depends on app/
   src/                ← .al test codeunits ([Test] procedures)
 scripts/
-  smoke.sh            ← the dev loop you should run after edits
+  compile.sh          ← compile all 3 projects with analyzers (called by test-*.sh)
+  test-integration.sh ← full BC-tier dev loop (compile + publish + container tests)
+  test-unit.sh        ← fast unit-test loop (compile + al-runner, no container)
+  test-mutation.sh    ← mutation testing via al-mutate
   download-symbols.sh ← pulls Microsoft symbol packages into .alpackages/
 bc-linux/             ← upstream runtime (gitignored); has its own CLAUDE.md
 .github/
   workflows/
-    bc-test.yml             ← CI: re-runs smoke.sh on a clean runner on push
+    bc-test.yml             ← CI: re-runs test-integration.sh on a clean runner on push
     copilot-setup-steps.yml ← what set up your environment (don't edit)
   copilot-instructions.md   ← this file
 CLAUDE.md             ← canonical workspace documentation
@@ -104,12 +116,14 @@ CLAUDE.md             ← canonical workspace documentation
 
 ## AL conventions in this repo
 
-- Production codeunits use IDs **50000..50049**. Tests use **50100..50149**.
-  These ranges are declared in the respective `app.json` files and are
-  **load-bearing**: `smoke.sh` and the CI workflow both filter tests by
-  the test range. Adding tests outside `50100..50149` silently excludes
-  them from the run. If you need more, expand the range in `app.json`
-  first.
+- Production codeunits use IDs **50000..50049**. Unit tests (in `/test/`)
+  use **50100..50149**. Integration tests (in `/integration-test/`) use
+  **50150..50160** (with `50161` reserved for the opt-in stress-scale
+  perf test). These ranges are declared in the respective `app.json`
+  files and are **load-bearing**: `test-integration.sh` and the CI
+  workflow filter by the integration range; `test-unit.sh` filters by
+  the unit range. Adding tests outside the right range silently excludes
+  them. If you need more, expand the range in `app.json` first.
 - One AL object per file. Filename pattern: `<Name>.<Type>.al`
   (e.g. `Customer.Table.al`, `HelloWorld.Codeunit.al`).
 - Test codeunits must declare `Subtype = Test;` and use the `[Test]`
@@ -124,13 +138,13 @@ CLAUDE.md             ← canonical workspace documentation
 
 Commit your changes and open a PR as usual. The `bc-test.yml` workflow
 will re-run the full compile + publish + test cycle on a clean runner —
-this is your independent validation. If `smoke.sh` was passing locally
+this is your independent validation. If `test-integration.sh` was passing locally
 but CI fails, the most likely cause is a stale `.app` checked in or a
 missing `.al` file; check your `git status` carefully.
 
 ## If something goes wrong
 
-- **`smoke.sh` says "Checking Business Central availability..." and
+- **`test-integration.sh` says "Checking Business Central availability..." and
   fails on curl**: BC isn't up yet. Run
   `(cd bc-linux && docker compose up -d --wait)` and retry.
 - **AL compile fails on a missing symbol**: your `.alpackages/` is

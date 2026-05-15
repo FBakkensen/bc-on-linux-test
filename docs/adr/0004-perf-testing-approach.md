@@ -28,7 +28,7 @@ would under-report our contribution to that latency and would miss
 regressions in the gate code (`Setup.Get`, the stockout check, the
 notification construction).
 
-Stress runs only when `BC_PERF_STRESS=1` is set in the smoke.sh
+Stress runs only when `BC_PERF_STRESS=1` is set in the test-integration.sh
 environment, so the typical-scale test runs every local cycle and CI
 sees the full envelope. Failure messages embed all 5 timings;
 on success JUnit's `<testcase time>` is sufficient drift signal — no

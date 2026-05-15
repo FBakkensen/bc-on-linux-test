@@ -70,13 +70,13 @@ would be abstraction without testability payoff.
   against real BC. Tests:
   (a) the BC implementations of the three interfaces against real BC tables;
   (b) end-to-end behaviour with the real composition root.
-  Runs in the container via `smoke.sh`. Object IDs 50150..50199.
+  Runs in the container via `test-integration.sh`. Object IDs 50150..50199.
 
 ## Pipeline changes that fall out
 
-- `scripts/smoke.sh` builds prod + integration-test, publishes both, runs
+- `scripts/test-integration.sh` builds prod + integration-test, publishes both, runs
   integration-test in the container. It stops touching `/test/`.
-- `scripts/test-fast.sh` keeps running `/test/` via al-runner. This is now
+- `scripts/test-unit.sh` keeps running `/test/` via al-runner. This is now
   the primary test path — most tests live there.
 - `BC_TEST_CODEUNIT_RANGE` default shifts to 50150..50199 (integration tests).
   Unit tests at 50100..50149 are al-runner-only and never run in the container.
