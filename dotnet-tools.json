@@ -8,6 +8,13 @@
         "al-runner"
       ],
       "rollForward": false
+    },
+    "msdyn365bc.al.mutate": {
+      "version": "0.2.0",
+      "commands": [
+        "al-mutate"
+      ],
+      "rollForward": false
     }
   }
 }
