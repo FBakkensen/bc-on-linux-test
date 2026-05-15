@@ -18,6 +18,8 @@ codeunit 50100 "Max Sellable Calc Tests"
         NotificationDispatcher: Interface "INotificationDispatcher";
         Result: Decimal;
     begin
+        Initialize();
+
         // GIVEN three trivial stub implementations of the BC seam interfaces
         EventSource := EventSourceStub;
         StockoutChecker := StockoutCheckerStub;
@@ -47,6 +49,7 @@ codeunit 50100 "Max Sellable Calc Tests"
         NotificationDispatcher: Interface "INotificationDispatcher";
         Result: Decimal;
     begin
+        Initialize();
         WorkDate(DMY2Date(15, 1, 2026));
 
         // GIVEN an item with 100 base-UoM on-hand from a past ILE
@@ -90,6 +93,7 @@ codeunit 50100 "Max Sellable Calc Tests"
         NotificationDispatcher: Interface "INotificationDispatcher";
         Result: Decimal;
     begin
+        Initialize();
         WorkDate(DMY2Date(15, 1, 2026));
 
         Item.Init();
@@ -135,6 +139,7 @@ codeunit 50100 "Max Sellable Calc Tests"
         NotificationDispatcher: Interface "INotificationDispatcher";
         Result: Decimal;
     begin
+        Initialize();
         WorkDate(DMY2Date(15, 1, 2026));
 
         Item.Init();
@@ -179,6 +184,7 @@ codeunit 50100 "Max Sellable Calc Tests"
         NotificationDispatcher: Interface "INotificationDispatcher";
         Result: Decimal;
     begin
+        Initialize();
         WorkDate(DMY2Date(15, 1, 2026));
 
         Item.Init();
@@ -226,6 +232,7 @@ codeunit 50100 "Max Sellable Calc Tests"
         NotificationDispatcher: Interface "INotificationDispatcher";
         Result: Decimal;
     begin
+        Initialize();
         WorkDate(DMY2Date(20, 1, 2026));
 
         Item.Init();
@@ -278,6 +285,7 @@ codeunit 50100 "Max Sellable Calc Tests"
         NotificationDispatcher: Interface "INotificationDispatcher";
         Result: Decimal;
     begin
+        Initialize();
         WorkDate(DMY2Date(15, 1, 2026));
 
         Item.Init();
@@ -322,6 +330,7 @@ codeunit 50100 "Max Sellable Calc Tests"
         NotificationDispatcher: Interface "INotificationDispatcher";
         Result: Decimal;
     begin
+        Initialize();
         WorkDate(DMY2Date(15, 1, 2026));
 
         Item.Init();
@@ -370,6 +379,7 @@ codeunit 50100 "Max Sellable Calc Tests"
         NotificationDispatcher: Interface "INotificationDispatcher";
         Result: Decimal;
     begin
+        Initialize();
         WorkDate(DMY2Date(15, 1, 2026));
 
         Item.Init();
@@ -413,6 +423,7 @@ codeunit 50100 "Max Sellable Calc Tests"
         StockoutChecker: Interface "IStockoutChecker";
         NotificationDispatcher: Interface "INotificationDispatcher";
     begin
+        Initialize();
         // Calculate must not raise notifications, write data, or otherwise leak side
         // effects — PBT runs it in a UI-restricted session where any of those would
         // crash the background task. Pinning that invariant here so it can't regress.
@@ -431,5 +442,14 @@ codeunit 50100 "Max Sellable Calc Tests"
             EventSource, StockoutChecker, NotificationDispatcher);
 
         Assert.AreEqual(0, NotificationDispatcherStub.GetDispatchCount(), 'Calculate must not dispatch notifications — PBT-safe.');
+    end;
+
+    local procedure Initialize()
+    var
+        Item: Record Item;
+        ILE: Record "Item Ledger Entry";
+    begin
+        Item.DeleteAll();
+        ILE.DeleteAll();
     end;
 }

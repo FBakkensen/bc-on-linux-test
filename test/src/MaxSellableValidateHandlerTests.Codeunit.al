@@ -10,6 +10,8 @@ codeunit 50104 "Max Sellable Handler Tests"
     var
         SalesSetup: Record "Sales & Receivables Setup";
     begin
+        Initialize();
+
         // GIVEN setup with both flags on
         SalesSetup.Init();
         SalesSetup."Stockout Warning" := true;
@@ -26,6 +28,7 @@ codeunit 50104 "Max Sellable Handler Tests"
     [Test]
     procedure GateStockoutOffMaxSellableOffYieldsNoDispatch()
     begin
+        Initialize();
         // (Stockout off, Max Sellable off) → silent
         WriteSetup(false, false);
         Assert.AreEqual(0, RunGateWithTinyInventoryAndBigQty(100, 50, false), 'No dispatch when Max Sellable Warning is off (and Stockout off).');
@@ -34,6 +37,7 @@ codeunit 50104 "Max Sellable Handler Tests"
     [Test]
     procedure GateStockoutOnMaxSellableOffYieldsNoDispatch()
     begin
+        Initialize();
         // (Stockout on, Max Sellable off) → silent (Max Sellable disabled)
         WriteSetup(true, false);
         Assert.AreEqual(0, RunGateWithTinyInventoryAndBigQty(100, 50, false), 'No dispatch when Max Sellable Warning is off (regardless of Stockout).');
@@ -42,6 +46,7 @@ codeunit 50104 "Max Sellable Handler Tests"
     [Test]
     procedure GateStockoutHitSuppressesMaxSellableNotification()
     begin
+        Initialize();
         // (Stockout on, Max Sellable on, stockout hits) → standard wins, no Max Sellable dispatch
         WriteSetup(true, true);
         Assert.AreEqual(0, RunGateWithTinyInventoryAndBigQty(100, 50, true), 'Stockout hit must suppress the Max Sellable notification (standard CU 311 wins).');
@@ -50,6 +55,7 @@ codeunit 50104 "Max Sellable Handler Tests"
     [Test]
     procedure GateStockoutMissAndMaxSellableExceededDispatches()
     begin
+        Initialize();
         // (Stockout on, Max Sellable on, stockout miss, max sellable < qty) → dispatch
         WriteSetup(true, true);
         Assert.AreEqual(1, RunGateWithTinyInventoryAndBigQty(100, 50, false), 'Stockout miss + Max Sellable exceeded must dispatch a notification.');
@@ -58,6 +64,7 @@ codeunit 50104 "Max Sellable Handler Tests"
     [Test]
     procedure GateMaxSellableNotExceededYieldsNoDispatch()
     begin
+        Initialize();
         // (Stockout on, Max Sellable on, stockout miss, max sellable >= qty) → silent
         WriteSetup(true, true);
         Assert.AreEqual(0, RunGateWithBigInventoryAndSmallQty(50, 100, false), 'Quantity within Max Sellable must not dispatch.');
@@ -66,10 +73,22 @@ codeunit 50104 "Max Sellable Handler Tests"
     [Test]
     procedure GateStockoutOffMaxSellableOnDispatchesIfReached()
     begin
+        Initialize();
         // (Stockout off, Max Sellable on) — unreachable by UI, but if forced via direct
         // Insert/Modify the gate still runs Calculate (stockout step is skipped).
         WriteSetup(false, true);
         Assert.AreEqual(1, RunGateWithTinyInventoryAndBigQty(100, 50, false), 'With Stockout off and Max Sellable on, the gate proceeds straight to Calculate and dispatches.');
+    end;
+
+    local procedure Initialize()
+    var
+        Item: Record Item;
+        ILE: Record "Item Ledger Entry";
+        SalesSetup: Record "Sales & Receivables Setup";
+    begin
+        Item.DeleteAll();
+        ILE.DeleteAll();
+        SalesSetup.DeleteAll();
     end;
 
     local procedure WriteSetup(StockoutWarning: Boolean; MaxSellableWarning: Boolean)
