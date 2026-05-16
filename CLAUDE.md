@@ -8,7 +8,7 @@ A local AL development workspace that runs Microsoft Dynamics 365 Business Centr
 
 ## Per-subfolder context
 
-[`app/`](app/CLAUDE.md), [`test/`](test/CLAUDE.md), and [`integration-test/`](integration-test/CLAUDE.md) each carry their own `CLAUDE.md` with hyper-local rules (folder-specific ID ranges, stub vs real-BC conventions, runner constraints, naming patterns). They load on-demand when Claude touches files in those folders — this root file stays canonical for repo-wide concerns.
+[`app/`](app/CLAUDE.md), [`test/`](test/CLAUDE.md), [`integration-test/`](integration-test/CLAUDE.md), and [`planning-optimizer/`](planning-optimizer/CLAUDE.md) each carry their own `CLAUDE.md` with hyper-local rules (folder-specific ID ranges, stub vs real-BC conventions, runner constraints, naming patterns; for `planning-optimizer/` it's Python + seam-layer rules per ADR 0009). They load on-demand when Claude touches files in those folders — this root file stays canonical for repo-wide concerns.
 
 ## Common commands
 

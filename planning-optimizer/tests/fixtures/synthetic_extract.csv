@@ -1,0 +1,6 @@
+item_no,variant_code,location_code,daily_demand,lead_time_days
+ITEM-A,,BLUE,10,5
+ITEM-A,,BLUE,20,5
+ITEM-A,,BLUE,30,7
+ITEM-A,,BLUE,40,6
+ITEM-A,,BLUE,50,7

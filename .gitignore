@@ -26,6 +26,13 @@ bc-linux/
 docs/reviewer-pack/diagrams/*.png
 docs/reviewer-pack/*.pdf
 
+# Python (planning-optimizer/ sibling package per ADR 0009)
+planning-optimizer/.venv/
+**/__pycache__/
+**/*.egg-info/
+**/.pytest_cache/
+**/.ipynb_checkpoints/
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bc-planning-optimizer"
+version = "0.1.0"
+description = "Sandbox planning-parameter optimizer (ABC, bootstrap LTD, simulator, recommender). Pure-Python math package; BC seam is API + file exchange (ADR 0009)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Flemming Bakkensen", email = "flemming.bakkensen@gmail.com" },
+]
+dependencies = [
+    "pandas>=2.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+notebook = [
+    "jupyter>=1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bc_planning_optimizer", "extracts"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
