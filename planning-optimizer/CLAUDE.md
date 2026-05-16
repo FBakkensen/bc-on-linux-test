@@ -10,7 +10,8 @@ Domain vocabulary in [`CONTEXT.md`](../CONTEXT.md) (planning glossary section).
   against fixture data. If a test needs a live BC tier, it belongs in
   `integration-test/`, not here.
 - **No direct SQL against BC, even in sandbox.** The seam is API page reads,
-  AL Query exports to file, and API page POSTs. SQL would not generalise to
+  `QueryType = API` Query reads over paginated OData (then persisted as CSV
+  by `extracts/bc_api.py`), and API page POSTs. SQL would not generalise to
   SaaS and would bake a deployment-blocking dependency into the math package.
 - **`extracts/` is the only code that talks to BC.** Math modules
   (`recommender`, `classifier`, `forecaster`, `lead_time`, `simulator`,
@@ -18,9 +19,11 @@ Domain vocabulary in [`CONTEXT.md`](../CONTEXT.md) (planning glossary section).
   one-way: `extracts/` adapts BC to the core schema; the core does not reach
   into the seam.
 - **Stub modules are intentional.** `classifier.py`, `forecaster.py`,
-  `lead_time.py`, `simulator.py`, `confidence.py`, and `extracts/bc_api.py`
-  are docstring-only placeholders reserving named seams for later slices.
-  Don't delete them and don't flag them as dead code.
+  `lead_time.py`, `simulator.py`, and `confidence.py` are docstring-only
+  placeholders reserving named seams for later slices. Don't delete them
+  and don't flag them as dead code. `extracts/bc_api.py` now hosts the
+  OData fetch + paginate + transform helpers (see slice #12); it grows
+  one fetcher per AL API Query.
 - **TDD on the math seam.** Tests drive the public `bc_planning_optimizer.run`
   interface only — no poking at internal modules. Survives the bootstrap-LTD /
   SBA / AutoETS / simulator swap without rewriting.

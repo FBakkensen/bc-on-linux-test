@@ -32,12 +32,17 @@ The data-shape split:
   current planning parameters: AL API pages or API queries, called over
   OData with auth.
 - **Bulk historical reads** — `Item Ledger Entry`, `Posted Purchase
-  Receipt`, open supply documents: AL Query objects pre-aggregate to
-  `(Item, Variant, Location, period)` granularity *server-side*, then
-  export to file. In sandbox the file lands on the local filesystem; in
-  production it lands in Azure Blob Storage (or equivalent). Python reads
-  the file. Pushing aggregation server-side keeps the payload bounded
-  even for tenants with multi-year ILE history.
+  Receipt`, open supply documents: AL Query objects with `QueryType = API`
+  pre-aggregate to `(Item, Variant, Location, period)` granularity
+  *server-side*, exposed over paginated OData. An orchestration script
+  (`extracts/bc_api.py` invoked by `scripts/extract-*.sh`) follows
+  `@odata.nextLink`, maps the camelCase response to the snake_case
+  schema, and writes a CSV at a known path. In sandbox the CSV lands on
+  the local filesystem under `.build/extracts/`; in production it lands
+  in Azure Blob Storage (or equivalent). Python's math layer reads the
+  CSV via `extracts/bc_files.py`. Server-side aggregation keeps the
+  payload bounded even for tenants with multi-year ILE history; OData
+  pagination handles the rest.
 - **Writes** — recommendation header / lines, simulation results, model
   run log: API page POST from Python. Planner sees them live in BC.
 
@@ -82,9 +87,10 @@ API page slate for sandbox (informative, not load-bearing):
 
 - `apiItems`, `apiStockkeepingUnits`, `apiVendors`, `apiLocations`,
   `apiCurrentPlanningParams` — small dimension reads.
-- `apiItemLedgerSummary`, `apiPurchaseReceiptSummary`,
-  `apiOpenSupplyDemand` — bulk-aggregated reads (driven by AL Query
-  objects, exported to file rather than streamed per row).
+- `itemLedgerSummary`, `purchaseReceiptSummary`, `openSupplyDemand` —
+  bulk-aggregated reads exposed as `QueryType = API` AL Query objects.
+  Consumers GET via paginated OData and persist the joined response as a
+  CSV at the agreed path (sandbox: local filesystem; production: Blob).
 - `apiPlanningRecommendationHeader`, `apiPlanningRecommendationLine`,
   `apiPlanningSimulationResult`, `apiPlanningModelRunLog` — write-back
   surfaces.
