@@ -1,0 +1,21 @@
+%%{init: {"theme": "neutral", "themeVariables": {"fontFamily": "Source Sans Pro, sans-serif"}}}%%
+flowchart TB
+  Run["New Model Run<br/>for an (Item, Variant, Location)"]
+
+  Run --> BaselineQ{"Baseline<br/>available?"}
+  BaselineQ -->|"Yes:<br/>prior applied rec<br/>(if recent) OR<br/>12-mo rolling"| Comp["Compare current run vs baseline"]
+  BaselineQ -->|"No"| First["Emit 'First recommendation,<br/>no baseline available'"]
+
+  Comp --> CompFires["Comparative codes fire<br/>where Δ exceeds threshold<br/>(9 codes across demand +<br/>lead-time families)"]
+
+  Run --> Det["Check deterministic conditions<br/>vs current state"]
+  Det --> DetFires["Setup / constraint /<br/>risk codes fire<br/>(9 codes)"]
+
+  CompFires --> All["All triggered codes,<br/>each with (Old, New, Δ, Δ%)"]
+  DetFires --> All
+  First --> All
+
+  All --> Attr["Two-axis attribution:<br/>recompute ROP with<br/>(new demand + old LT)<br/>vs<br/>(old demand + new LT)"]
+
+  Attr --> Primary["Primary Reason =<br/>code from larger-contribution axis<br/>with largest |Δ%|"]
+  Attr --> Contrib["Contributing list,<br/>ordered by contribution"]

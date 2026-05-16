@@ -1,0 +1,19 @@
+%%{init: {"theme": "neutral", "themeVariables": {"fontFamily": "Source Sans Pro, sans-serif"}}}%%
+flowchart LR
+  subgraph Inputs["Five factors (each bucketed Low / Medium / High)"]
+    direction TB
+    F1["Forecast Confidence<br/>(fit quality:<br/>walk-forward MASE or<br/>scaled RMSE)"]
+    F2["Data sufficiency<br/>(LT samples ≥10,<br/>demand events ≥30)"]
+    F3["Replay-vs-MC agreement<br/>(|β_replay − β_MC| pp)"]
+    F4["Stockout-history cap<br/>(≥5 zero-inventory days<br/>caps at Medium)"]
+    F5["Grain-promotion cap<br/>(computed coarser than<br/>intended caps at Medium)"]
+  end
+
+  F1 --> Min{"min over<br/>all factors"}
+  F2 --> Min
+  F3 --> Min
+  F4 --> Min
+  F5 --> Min
+
+  Min --> Out["Recommendation Confidence<br/>(Low / Medium / High)"]
+  Min --> Limit["Limiting Factor<br/>(the factor that<br/>pulled the cascade down)"]

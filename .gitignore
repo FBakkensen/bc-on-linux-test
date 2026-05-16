@@ -22,6 +22,10 @@ bc-linux/
 .bc-cache/
 .symbols/
 
+# Reviewer-pack generated artifacts (regenerate via docs/reviewer-pack/README.md)
+docs/reviewer-pack/diagrams/*.png
+docs/reviewer-pack/*.pdf
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

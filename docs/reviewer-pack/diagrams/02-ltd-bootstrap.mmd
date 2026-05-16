@@ -1,0 +1,22 @@
+%%{init: {"theme": "neutral", "themeVariables": {"fontFamily": "Source Sans Pro, sans-serif"}}}%%
+flowchart TB
+  Hist["Historical extracts per<br/>(Item, Variant, Location)"]
+  Hist --> Demand["Signed ILE demand<br/>(daily series)"]
+  Hist --> LT["Lead-time samples<br/>(per replenishment system)"]
+
+  Demand --> Forecast["Forecaster:<br/>SBA if intermittent,<br/>AutoETS if smooth"]
+  Forecast --> Mean["Expected demand<br/>per period (level)"]
+
+  Demand --> Pair["Match each LT sample<br/>to its demand window<br/>(joint historical pair)"]
+  LT --> Pair
+
+  Mean --> Shift["Level shift:<br/>scale sampled window by<br/>forecast mean / historical mean"]
+  Pair --> Shift
+
+  Shift --> Sample["Draw N samples:<br/>sum demand over the<br/>LT-day window"]
+  Sample --> Dist["Empirical LTD<br/>distribution"]
+
+  Dist --> ROP["Reorder Point =<br/>quantile_α(LTD)"]
+  ROP --> SS["Safety Stock =<br/>ROP − mean(LTD)"]
+
+  Setup["α target per<br/>ABC class<br/>(setup config)"] --> ROP

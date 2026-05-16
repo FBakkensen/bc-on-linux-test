@@ -1,0 +1,3 @@
+%%{init: {"theme": "neutral", "themeVariables": {"fontSize": "36px", "fontFamily": "sans-serif"}, "flowchart": {"nodeSpacing": 50, "rankSpacing": 60, "padding": 26}}}%%
+flowchart LR
+  Source["BC data<br/>sources"] --> Engine["Recommendation<br/>engine"] --> Recs["Recommendation<br/>per SKU"] --> Review["Planner<br/>review"] -->|"Approve &amp; Apply"| Apply["Apply +<br/>audit log"]

@@ -1,0 +1,13 @@
+%%{init: {"theme": "neutral", "themeVariables": {"fontFamily": "Source Sans Pro, sans-serif"}}}%%
+stateDiagram-v2
+  direction LR
+  [*] --> Pending : Model Run emits
+  Pending --> Pending : Next Model Run<br/>supersedes<br/>(material change<br/>above threshold)
+  Pending --> Reviewed : Planner marks
+  Pending --> Rejected : Planner rejects
+  Pending --> Approved : Planner approves
+  Reviewed --> Approved : Planner approves
+  Reviewed --> Rejected : Planner rejects
+  Approved --> Applied : Apply codeunit<br/>writes Item / SKU
+  Rejected --> [*]
+  Applied --> [*]
