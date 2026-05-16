@@ -1,0 +1,6 @@
+item_no,variant_code,location_code,posting_date,quantity
+ITEM-A,,BLUE,2026-05-01,-10
+ITEM-A,,BLUE,2026-05-02,-20
+ITEM-A,,BLUE,2026-05-03,-30
+ITEM-A,,BLUE,2026-05-04,-40
+ITEM-A,,BLUE,2026-05-05,-50
