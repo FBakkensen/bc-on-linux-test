@@ -9,19 +9,17 @@ set -euo pipefail
 # container via bc-linux/scripts/run-tests.sh (OData + WebSocket hybrid for
 # TestPage support).
 #
+# The runner auto-discovers Subtype=Test codeunits from the integration test
+# .app's SymbolReference.json, so adding a new test codeunit anywhere in the
+# integration-test idRange (50150..50199 per integration-test/app.json) needs
+# no change here.
+#
 # Requires the BC stack to be running (cd bc-linux && docker compose up -d).
-# Production codeunits live in 50000..50049; integration tests in 50150..50160
-# plus 50163..50164 (AL Query suites: ILE Summary, Purchase Receipt LT) by
-# default. 50161 is the stress-scale perf test, opt-in via
-# BC_PERF_STRESS=1 per ADR 0004.
 #
 # Usage:
 #   ./scripts/test-integration.sh
-#   BC_TEST_CODEUNIT_RANGE=50150..50150 ./scripts/test-integration.sh
-#   BC_PERF_STRESS=1 ./scripts/test-integration.sh
 #
-# Env overrides: BC_BASE_URL, BC_DEV_URL, BC_AUTH, BC_TEST_CODEUNIT_RANGE,
-# BC_PERF_STRESS.
+# Env overrides: BC_BASE_URL, BC_DEV_URL, BC_AUTH.
 #
 # Output: .build/test-integration.xml (JUnit).
 
@@ -34,12 +32,6 @@ JUNIT_OUTPUT="$BUILD_DIR/test-integration.xml"
 BASE_URL="${BC_BASE_URL:-http://localhost:7048/BC}"
 DEV_URL="${BC_DEV_URL:-http://localhost:7049/BC/dev}"
 AUTH="${BC_AUTH:-BCRUNNER:Admin123!}"
-if [[ "${BC_PERF_STRESS:-0}" == "1" ]]; then
-    DEFAULT_RANGE="50150..50161|50163..50164"
-else
-    DEFAULT_RANGE="50150..50160|50163..50164"
-fi
-CODEUNIT_RANGE="${BC_TEST_CODEUNIT_RANGE:-$DEFAULT_RANGE}"
 
 mkdir -p "$BUILD_DIR"
 
@@ -55,7 +47,6 @@ bc_publish_app "$APP_PACKAGE" "$DEV_URL" "$AUTH"
 echo "Running AL integration tests..."
 "$ROOT_DIR/bc-linux/scripts/run-tests.sh" \
     --app "$INTEGRATION_TEST_PACKAGE" \
-    --codeunit-range "$CODEUNIT_RANGE" \
     --base-url "$BASE_URL" \
     --dev-url "$DEV_URL" \
     --auth "$AUTH" \

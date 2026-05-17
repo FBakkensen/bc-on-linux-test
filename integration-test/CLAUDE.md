@@ -12,13 +12,12 @@ exercises real BC behaviour end-to-end.
   `ITStockoutCheckerStub`) stub *non-BC* dependencies we still want
   deterministic. Anything that talks to BC tables/codeunits goes
   through the real implementation.
-- **ID range gap to watch.** `app.json` reserves `50150..50199`, but
-  the runner default `BC_TEST_CODEUNIT_RANGE=50150..50160` only
-  executes that subset. Tests outside `50150..50160` are silently
-  skipped unless you override.
-- **Codeunit `50161` is opt-in.** Stress-scale perf test
-  (`MaxSellablePerfStressTests`). Run with
-  `BC_PERF_STRESS=1 ./scripts/test-integration.sh` to include it.
+- **ID range.** `app.json` reserves `50150..50199`. `test-integration.sh`
+  passes no `--codeunit-range`; the upstream runner discovers every
+  `Subtype=Test` codeunit from the compiled `.app` and runs all of them.
+  Adding a new test codeunit anywhere in `50150..50199` just works.
+  Fixture codeunits (no `Subtype = Test;`, e.g. `MaxSellablePerfFixture`)
+  and stub codeunits (`IT*Stub`) are skipped automatically.
 - **TestPage is fine here.** Real client session via OData + WebSocket —
   the only place you can choreograph pages, real DB state, permissions,
   and full BC lifecycle events. If a `test/` unit test needs any of
@@ -33,13 +32,12 @@ exercises real BC behaviour end-to-end.
   type (`SalesLine`, `PurchaseLine`, `Assembly`, `ProdOrder`,
   `TransferLine`, `ServiceLine`, `JobPlanning`). Add a new one when the
   `EventSource` interface gains a BC implementation.
-- **Perf tests** share `MaxSellablePerfFixture` for setup; typical
-  (`MaxSellablePerfTypicalTests`) and stress (`MaxSellablePerfStressTests`)
-  differ only in scale.
+- **Perf test** — `MaxSellablePerfTypicalTests` (50160) pins the typing-SLA
+  envelope per ADR 0004; setup lives in `MaxSellablePerfFixture` (50162,
+  not a test codeunit). Scope is algorithmic regressions only — see ADR
+  0004 for the index-scan caveat and the code-review mitigation.
 - **`IT*Stub.Codeunit.al`** — keep narrow. Only stub what BC can't give
   you deterministically.
-- **Run a slice**:
-  `BC_TEST_CODEUNIT_RANGE=50150..50150 ./scripts/test-integration.sh`.
 - **Skip recompile**: call `bc-linux/scripts/run-tests.sh` directly with
   the staged `.build/BcLinuxSmokeIntegrationTests.app`. Full args in
   root CLAUDE.md.

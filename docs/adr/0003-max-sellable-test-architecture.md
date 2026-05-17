@@ -78,8 +78,10 @@ would be abstraction without testability payoff.
   integration-test in the container. It stops touching `/test/`.
 - `scripts/test-unit.sh` keeps running `/test/` via al-runner. This is now
   the primary test path — most tests live there.
-- `BC_TEST_CODEUNIT_RANGE` default shifts to 50150..50199 (integration tests).
-  Unit tests at 50100..50149 are al-runner-only and never run in the container.
+- `test-integration.sh` passes no codeunit range; the upstream runner
+  auto-discovers `Subtype=Test` codeunits from the integration test `.app`
+  across the full 50150..50199 idRange. Unit tests at 50100..50149 are
+  al-runner-only and never run in the container.
 - `.code-workspace`, `download-symbols.sh` (the `APPS` array), and the
   workspace `al.packageCachePath` need entries for the new app and its
   library dependencies.

@@ -58,12 +58,6 @@ booting. Bring it up and wait:
 (cd bc-linux && docker compose up -d --wait)
 ```
 
-Narrow the test slice while iterating:
-
-```bash
-BC_TEST_CODEUNIT_RANGE=50150..50150 ./scripts/test-integration.sh
-```
-
 ## What NOT to do
 
 - **Do not run `docker compose down`, `docker stop`, or anything else
@@ -118,12 +112,14 @@ CLAUDE.md             ← canonical workspace documentation
 
 - Production codeunits use IDs **50000..50049**. Unit tests (in `/test/`)
   use **50100..50149**. Integration tests (in `/integration-test/`) use
-  **50150..50160** (with `50161` reserved for the opt-in stress-scale
-  perf test). These ranges are declared in the respective `app.json`
-  files and are **load-bearing**: `test-integration.sh` and the CI
-  workflow filter by the integration range; `test-unit.sh` filters by
-  the unit range. Adding tests outside the right range silently excludes
-  them. If you need more, expand the range in `app.json` first.
+  **50150..50199**. These ranges are declared in the respective `app.json`
+  files and are **load-bearing**: `test-unit.sh` filters by the unit
+  range; `test-integration.sh` passes no range and lets the upstream
+  runner auto-discover every `Subtype=Test` codeunit from the compiled
+  `.app`, so new integration tests anywhere in `50150..50199` are picked
+  up without script edits. Adding tests outside the right `app.json`
+  range silently excludes them. If you need more, expand the range in
+  `app.json` first.
 - One AL object per file. Filename pattern: `<Name>.<Type>.al`
   (e.g. `Customer.Table.al`, `HelloWorld.Codeunit.al`).
 - Test codeunits must declare `Subtype = Test;` and use the `[Test]`

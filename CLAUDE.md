@@ -36,13 +36,10 @@ cd bc-linux && docker compose up -d --wait
 # Verify BC is reachable
 curl -sf -u BCRUNNER:Admin123! http://localhost:7048/BC/ODataV4/Company
 
-# Run a narrower test slice (filters by codeunit ID range)
-BC_TEST_CODEUNIT_RANGE=50150..50150 ./scripts/test-integration.sh
-
-# Run integration tests directly without recompiling (calls upstream runner)
+# Run integration tests directly without recompiling (calls upstream runner —
+# auto-discovers Subtype=Test codeunits from the .app, no range needed)
 ./bc-linux/scripts/run-tests.sh \
     --app .build/BcLinuxSmokeIntegrationTests.app \
-    --codeunit-range 50150..50160 \
     --base-url http://localhost:7048/BC \
     --dev-url http://localhost:7049/BC/dev \
     --auth BCRUNNER:Admin123! \
@@ -62,13 +59,13 @@ The integration test pipeline is a fixed sequence in [`scripts/test-integration.
 - **Compile path**: all three projects share `/.alpackages/` at the repo root (`al.packageCachePath: "../.alpackages"` in the workspace settings, and [`scripts/compile.sh`](scripts/compile.sh) wraps `al-compile` which auto-detects the workspace cache). `download-symbols.sh` fills `.alpackages/` with the six Microsoft apps the test framework needs (`System`, `System Application`, `Business Foundation`, `Base Application`, `Application`, `Library Assert`). `compile.sh` builds `app` first and stages its `.app` into `.alpackages/` so dependents (`test`, `integration-test`) resolve the `Bc Linux Smoke` symbol. If you add a new Microsoft dep to any project's `app.json` (e.g. `Test Runner`, `Any`), append its name to `download-symbols.sh`'s `APPS` array.
 - **Publish path** (test-integration.sh): production app is published via `bc-linux/scripts/publish-app.sh` (sourced, exposes `bc_publish_app`). Integration tests are published *and* executed by `bc-linux/scripts/run-tests.sh`, which is a hybrid OData (suite + results) + WebSocket (test session) flow — TestPage support requires a real client session, which OData alone cannot provide.
 - **Unit test path** (`scripts/test-unit.sh`): runs `./scripts/compile.sh app test` for a fresh analyzer-clean gate, then wraps `al-runner` with the canonical args — `--packages .alpackages --output-junit .build/test-unit.xml app/src test/src`. Extra flags pass through (`--run`, `--coverage`, `--verbose`, …). al-runner downloads the BC Service Tier DLLs on first run and caches them; no container traffic. Failures exit 1, runner limitations exit 2 — use `--strict` in CI to escalate (2 → 1) so regressions in al-runner support don't silently look like passes.
-- **ID ranges are load-bearing**: production codeunits live in `50000..50049` (per `app/app.json`), unit tests in `50100..50149` (per `test/app.json`), integration tests in `50150..50160` (per `integration-test/app.json` and the default `BC_TEST_CODEUNIT_RANGE`), with `50161` reserved for the opt-in stress-scale perf test (`BC_PERF_STRESS=1`). Adding tests outside the active range silently excludes them.
+- **ID ranges are load-bearing**: production codeunits live in `50000..50049` (per `app/app.json`), unit tests in `50100..50149` (per `test/app.json`), integration tests in `50150..50199` (per `integration-test/app.json`). `test-unit.sh` filters by the unit range; `test-integration.sh` passes no range — the upstream runner auto-discovers `Subtype=Test` codeunits from the integration test `.app`'s `SymbolReference.json` (see `bc-linux/scripts/run-tests.sh:164-244`), so fixture codeunits, stubs, and any future test additions are handled without script edits. Adding tests outside the right `app.json` range silently excludes them; expand the range in `app.json` first.
 - **`BC_CLEAR_ALL_APPS=selective` + computed `BC_KEEP_APP_IDS`**: the upstream entrypoint exposes 5 app-clearing modes (`none` / `selective` / `deps-only` / `true` / `false`); the default `false` deletes the test framework apps (Test Runner, Library Assert, Library Variable Storage, Permissions Mock, Any) on first boot, which leaves `download-symbols.sh` unable to fetch `Library Assert`. The intended path is `BC_CLEAR_ALL_APPS=selective` plus a `BC_KEEP_APP_IDS` set computed by `bc-linux/scripts/resolve-keep-app-ids.py` from the project's `app.json` files (plus `bc-linux/extensions/TestRunnerExtension/app.json`) against the BC artifact manifests under `.bc-artifacts/<BC_VERSION>/`. Local and CI use the same script — locally the resulting `.env` is pinned in `bc-linux/.env`; in CI it's emitted to `.bc-cache/env` by `copilot-setup-steps.yml`. Both gitignored. Re-run `resolve-keep-app-ids.py` whenever you bump `BC_VERSION` or add a Microsoft dep to any `app.json`.
 - **Build outputs** land in `.build/`: `BcLinuxSmoke.app`, `BcLinuxSmokeTests.app`, `BcLinuxSmokeIntegrationTests.app` from `compile.sh`; `test-unit.xml` from `test-unit.sh`; `test-integration.xml` from `test-integration.sh`; `mutation/{mutations.json,report.md}` from `test-mutation.sh`. That dir, the shared `/.alpackages/`, and any per-project `.dev/` (al-compile diagnostics) are gitignored.
 
 ## Environment overrides
 
-`test-integration.sh` and `download-symbols.sh` honor `BC_BASE_URL`, `BC_DEV_URL`, `BC_AUTH`; `test-integration.sh` additionally honors `BC_TEST_CODEUNIT_RANGE` and `BC_PERF_STRESS` (set to `1` to include codeunit 50161 in the default range). Defaults match the upstream BC stack (ports 7048/7049, `BCRUNNER:Admin123!`). `compile.sh`, `test-unit.sh`, and `test-mutation.sh` run out-of-process and take no BC env vars — they talk only to the local `.alpackages/`.
+`test-integration.sh` and `download-symbols.sh` honor `BC_BASE_URL`, `BC_DEV_URL`, `BC_AUTH`. Defaults match the upstream BC stack (ports 7048/7049, `BCRUNNER:Admin123!`). `compile.sh`, `test-unit.sh`, and `test-mutation.sh` run out-of-process and take no BC env vars — they talk only to the local `.alpackages/`.
 
 ## VS Code
 

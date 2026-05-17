@@ -70,7 +70,7 @@ The script will:
 2. run `./scripts/compile.sh` (all three projects, full analyzers)
 3. publish the production app to the dev endpoint
 4. publish the integration test app through `bc-linux/scripts/run-tests.sh`
-5. execute the test codeunits in the `50150..50160` range (set `BC_PERF_STRESS=1` to include 50161)
+5. execute every `Subtype=Test` codeunit found in the integration test `.app` (the runner auto-discovers them from `SymbolReference.json`)
 6. write JUnit XML to `.build/test-integration.xml`
 
 ## Run the fast unit-test loop
@@ -100,5 +100,3 @@ For a VS Code-first flow:
 ## Environment overrides
 
 - `BC_BASE_URL`, `BC_DEV_URL`, `BC_AUTH` — honored by `download-symbols.sh` and `test-integration.sh`
-- `BC_TEST_CODEUNIT_RANGE` — `test-integration.sh` only
-- `BC_PERF_STRESS=1` — `test-integration.sh` includes the stress-scale perf test (codeunit 50161); see [`docs/adr/0004-perf-testing-approach.md`](/home/fbakkensen/repos/bc-on-linux-test/docs/adr/0004-perf-testing-approach.md)
