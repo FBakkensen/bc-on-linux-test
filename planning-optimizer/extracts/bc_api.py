@@ -7,9 +7,9 @@ camelCase response keys to the snake_case shape downstream code (the file
 seam and the recommender) consumes, and returns plain dicts ready to write
 as CSV.
 
-Slice #12 lands the first fetcher — `fetch_item_ledger_summaries`. Future
-slices grow one fetcher per AL API Query (purchase receipt LT, prod /
-assembly / transfer LT, open S&D, …) and the recommendation POST surface.
+One fetcher per AL API Query (ILE summary, purchase-receipt LT, and —
+later — prod / assembly / transfer LT, open S&D), plus the recommendation
+POST surface.
 """
 
 import base64
@@ -30,6 +30,19 @@ ILE_SUMMARY_CAMEL_TO_SNAKE = {
     "quantity": "quantity",
 }
 ILE_SUMMARY_COLUMNS = list(ILE_SUMMARY_CAMEL_TO_SNAKE.values())
+
+PURCHASE_RECEIPT_LT_CAMEL_TO_SNAKE = {
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "vendorNo": "vendor_no",
+    "poOrderDate": "po_order_date",
+    "receiptPostingDate": "receipt_posting_date",
+    "expectedReceiptDate": "expected_receipt_date",
+    "quantity": "quantity",
+    "documentNo": "document_no",
+}
+PURCHASE_RECEIPT_LT_COLUMNS = list(PURCHASE_RECEIPT_LT_CAMEL_TO_SNAKE.values())
 
 
 @dataclass(frozen=True)
@@ -53,12 +66,26 @@ def fetch_item_ledger_summaries(config: BcApiConfig) -> list[dict]:
     Returns rows in the snake_case shape consumers expect — the BC-side
     camelCase is hidden inside this seam.
     """
+    return _fetch_paginated(config, "itemLedgerSummaries", ILE_SUMMARY_CAMEL_TO_SNAKE)
+
+
+def fetch_purchase_receipt_lt(config: BcApiConfig) -> list[dict]:
+    """Paginate the purchaseReceiptLT API Query for the configured company.
+
+    Drop-shipments and special orders are excluded server-side by the AL
+    Query; `expected_receipt_date` may be null when the source PO has been
+    deleted or never had one captured at creation time (per ADR 0006).
+    """
+    return _fetch_paginated(config, "purchaseReceiptLT", PURCHASE_RECEIPT_LT_CAMEL_TO_SNAKE)
+
+
+def _fetch_paginated(config: BcApiConfig, entity_set: str, mapping: dict) -> list[dict]:
     company_id = _resolve_company_id(config)
     rows: list[dict] = []
-    url = f"{config.base_url}{API_PATH}/companies({company_id})/itemLedgerSummaries"
+    url = f"{config.base_url}{API_PATH}/companies({company_id})/{entity_set}"
     while url:
         data = _get_json(config, url)
-        rows.extend(_to_snake_case(r, ILE_SUMMARY_CAMEL_TO_SNAKE) for r in data["value"])
+        rows.extend(_to_snake_case(r, mapping) for r in data["value"])
         url = data.get("@odata.nextLink", "")
     return rows
 

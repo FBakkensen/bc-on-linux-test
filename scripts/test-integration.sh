@@ -11,8 +11,9 @@ set -euo pipefail
 #
 # Requires the BC stack to be running (cd bc-linux && docker compose up -d).
 # Production codeunits live in 50000..50049; integration tests in 50150..50160
-# plus 50163 (ILE Summary Query) by default. 50161 is the stress-scale perf
-# test, opt-in via BC_PERF_STRESS=1 per ADR 0004.
+# plus 50163..50164 (AL Query suites: ILE Summary, Purchase Receipt LT) by
+# default. 50161 is the stress-scale perf test, opt-in via
+# BC_PERF_STRESS=1 per ADR 0004.
 #
 # Usage:
 #   ./scripts/test-integration.sh
@@ -34,9 +35,9 @@ BASE_URL="${BC_BASE_URL:-http://localhost:7048/BC}"
 DEV_URL="${BC_DEV_URL:-http://localhost:7049/BC/dev}"
 AUTH="${BC_AUTH:-BCRUNNER:Admin123!}"
 if [[ "${BC_PERF_STRESS:-0}" == "1" ]]; then
-    DEFAULT_RANGE="50150..50161|50163"
+    DEFAULT_RANGE="50150..50161|50163..50164"
 else
-    DEFAULT_RANGE="50150..50160|50163"
+    DEFAULT_RANGE="50150..50160|50163..50164"
 fi
 CODEUNIT_RANGE="${BC_TEST_CODEUNIT_RANGE:-$DEFAULT_RANGE}"
 
