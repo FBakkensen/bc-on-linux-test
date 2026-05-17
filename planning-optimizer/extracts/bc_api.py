@@ -48,6 +48,39 @@ PURCHASE_RECEIPT_LT_CAMEL_TO_SNAKE = {
 }
 PURCHASE_RECEIPT_LT_COLUMNS = list(PURCHASE_RECEIPT_LT_CAMEL_TO_SNAKE.values())
 
+PRODUCTION_LT_CAMEL_TO_SNAKE = {
+    "prodOrderNo": "prod_order_no",
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "entryKind": "entry_kind",
+    "postingDate": "posting_date",
+    "prodOrderStartingDate": "prod_order_starting_date",
+    "prodOrderFinishingDate": "prod_order_finishing_date",
+    "prodOrderEndingDate": "prod_order_ending_date",
+}
+PRODUCTION_LT_COLUMNS = list(PRODUCTION_LT_CAMEL_TO_SNAKE.values())
+
+ASSEMBLY_LT_CAMEL_TO_SNAKE = {
+    "assemblyDocNo": "assembly_doc_no",
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "startingDate": "starting_date",
+    "postingDate": "posting_date",
+}
+ASSEMBLY_LT_COLUMNS = list(ASSEMBLY_LT_CAMEL_TO_SNAKE.values())
+
+TRANSFER_LT_CAMEL_TO_SNAKE = {
+    "documentNo": "document_no",
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "postingDate": "posting_date",
+    "quantity": "quantity",
+}
+TRANSFER_LT_COLUMNS = list(TRANSFER_LT_CAMEL_TO_SNAKE.values())
+
 
 @dataclass(frozen=True)
 class BcApiConfig:
@@ -84,6 +117,32 @@ def fetch_purchase_receipt_lt(config: BcApiConfig) -> list[JsonRow]:
     deleted or never had one captured at creation time (per ADR 0006).
     """
     return _fetch_paginated(config, "purchaseReceiptLT", PURCHASE_RECEIPT_LT_CAMEL_TO_SNAKE)
+
+
+def fetch_production_lt(config: BcApiConfig) -> list[JsonRow]:
+    """Paginate the productionLT API Query for the configured company.
+
+    Long-format extract — one row per (finished prod order, ILE entry).
+    Cancelled / scrapped prod orders are excluded server-side; the Python
+    parser derives `max(Output) − min(Consumption)` per ADR 0006 and falls
+    back to header dates when no consumption ILE exists.
+    """
+    return _fetch_paginated(config, "productionLT", PRODUCTION_LT_CAMEL_TO_SNAKE)
+
+
+def fetch_assembly_lt(config: BcApiConfig) -> list[JsonRow]:
+    """Paginate the assemblyLT API Query — one row per finished posted assembly."""
+    return _fetch_paginated(config, "assemblyLT", ASSEMBLY_LT_CAMEL_TO_SNAKE)
+
+
+def fetch_transfer_lt(config: BcApiConfig) -> list[JsonRow]:
+    """Paginate the transferLT API Query — one row per ILE Transfer entry.
+
+    Both source (negative quantity) and destination (positive quantity) rows
+    come through; the Python parser pairs them by (document_no, item_no,
+    variant_code) per ADR 0006.
+    """
+    return _fetch_paginated(config, "transferLT", TRANSFER_LT_CAMEL_TO_SNAKE)
 
 
 def _fetch_paginated(

@@ -8,6 +8,7 @@ permissionset 50199 "Bc Linux Smoke IT"
 
     Permissions =
         codeunit "Assembly Evt Src Tests" = X,
+        codeunit "Assembly LT Query Tests" = X,
         codeunit "ILE Summary Query Tests" = X,
         codeunit "IT Notif. Dispatcher Stub" = X,
         codeunit "IT Stockout Checker Stub" = X,
@@ -18,9 +19,11 @@ permissionset 50199 "Bc Linux Smoke IT"
         codeunit "Max Sellable Perf Typical" = X,
         codeunit "Max Sellable Skeleton Tests" = X,
         codeunit "Prod Order Evt Src Tests" = X,
+        codeunit "Production LT Query Tests" = X,
         codeunit "Purch Line Evt Src Tests" = X,
         codeunit "Purch Receipt LT Query Tests" = X,
         codeunit "Sales Line Evt Src Tests" = X,
         codeunit "Service Line Evt Src Tests" = X,
-        codeunit "Transfer Line Evt Src Tests" = X;
+        codeunit "Transfer Line Evt Src Tests" = X,
+        codeunit "Transfer LT Query Tests" = X;
 }

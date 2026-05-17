@@ -15,8 +15,11 @@ permissionset 50049 "Bc Linux Smoke"
         codeunit "Max Sellable Subscribers" = X,
         codeunit "Max Sellable Validate Handler" = X,
         page "Max Sellable FactBox" = X,
+        query "Assembly LT" = X,
         query "Item Ledger Summary" = X,
+        query "Production LT" = X,
         query "Purchase Receipt LT" = X,
+        query "Transfer LT" = X,
         tabledata "Max Sellable Event Buf" = RIMD,
         table "Max Sellable Event Buf" = X;
 }
