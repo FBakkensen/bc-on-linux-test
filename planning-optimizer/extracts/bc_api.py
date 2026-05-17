@@ -18,7 +18,11 @@ import os
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from typing import Any, cast
 
+# JSON-shaped rows: keys are the snake_case column names; values come from BC's
+# OData payload and can be any JSON-scalar. `Any` is the honest type at this seam.
+JsonRow = dict[str, Any]
 
 API_PATH = "/api/fbakkensen/planningOptimizer/v1.0"
 
@@ -47,12 +51,15 @@ PURCHASE_RECEIPT_LT_COLUMNS = list(PURCHASE_RECEIPT_LT_CAMEL_TO_SNAKE.values())
 
 @dataclass(frozen=True)
 class BcApiConfig:
+    """BC API endpoint + auth + company. Defaults target the local Docker tier."""
+
     base_url: str = "http://localhost:7052/BC"
     auth: str = "BCRUNNER:Admin123!"
     company_name: str = "CRONUS International Ltd."
 
     @classmethod
     def from_env(cls) -> "BcApiConfig":
+        """Build from BC_API_BASE_URL / BC_AUTH / BC_COMPANY_NAME, falling back to defaults."""
         return cls(
             base_url=os.environ.get("BC_API_BASE_URL", cls.base_url),
             auth=os.environ.get("BC_AUTH", cls.auth),
@@ -60,7 +67,7 @@ class BcApiConfig:
         )
 
 
-def fetch_item_ledger_summaries(config: BcApiConfig) -> list[dict]:
+def fetch_item_ledger_summaries(config: BcApiConfig) -> list[JsonRow]:
     """Paginate the itemLedgerSummary API Query for the configured company.
 
     Returns rows in the snake_case shape consumers expect — the BC-side
@@ -69,7 +76,7 @@ def fetch_item_ledger_summaries(config: BcApiConfig) -> list[dict]:
     return _fetch_paginated(config, "itemLedgerSummaries", ILE_SUMMARY_CAMEL_TO_SNAKE)
 
 
-def fetch_purchase_receipt_lt(config: BcApiConfig) -> list[dict]:
+def fetch_purchase_receipt_lt(config: BcApiConfig) -> list[JsonRow]:
     """Paginate the purchaseReceiptLT API Query for the configured company.
 
     Drop-shipments and special orders are excluded server-side by the AL
@@ -79,9 +86,11 @@ def fetch_purchase_receipt_lt(config: BcApiConfig) -> list[dict]:
     return _fetch_paginated(config, "purchaseReceiptLT", PURCHASE_RECEIPT_LT_CAMEL_TO_SNAKE)
 
 
-def _fetch_paginated(config: BcApiConfig, entity_set: str, mapping: dict) -> list[dict]:
+def _fetch_paginated(
+    config: BcApiConfig, entity_set: str, mapping: dict[str, str]
+) -> list[JsonRow]:
     company_id = _resolve_company_id(config)
-    rows: list[dict] = []
+    rows: list[JsonRow] = []
     url = f"{config.base_url}{API_PATH}/companies({company_id})/{entity_set}"
     while url:
         data = _get_json(config, url)
@@ -94,19 +103,21 @@ def _resolve_company_id(config: BcApiConfig) -> str:
     data = _get_json(config, f"{config.base_url}{API_PATH}/companies")
     for company in data["value"]:
         if company["name"] == config.company_name:
-            return company["id"]
+            return cast("str", company["id"])
     raise RuntimeError(f"Company not found: {config.company_name}")
 
 
-def _to_snake_case(camel_row: dict, mapping: dict) -> dict:
+def _to_snake_case(camel_row: JsonRow, mapping: dict[str, str]) -> JsonRow:
     return {snake: camel_row[camel] for camel, snake in mapping.items()}
 
 
-def _get_json(config: BcApiConfig, url: str) -> dict:
-    req = urllib.request.Request(url, headers={"Authorization": _auth_header(config.auth)})
+def _get_json(config: BcApiConfig, url: str) -> JsonRow:
+    # S310: URL comes from BcApiConfig.base_url (env-driven, http(s)-only by construction).
+    # No file:// risk — this is the BC API seam, not an arbitrary URL fetcher.
+    req = urllib.request.Request(url, headers={"Authorization": _auth_header(config.auth)})  # noqa: S310
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            return json.loads(resp.read())
+        with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310
+            return cast("JsonRow", json.loads(resp.read()))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {exc.code} on {url}\n{body}") from exc

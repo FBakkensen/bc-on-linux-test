@@ -82,8 +82,7 @@ def test_multi_sku_emits_independent_recommendations(tmp_path):
     output_path = run(extract)
     payload = _load(output_path)
     by_sku = {
-        (r["item_no"], r["variant_code"], r["location_code"]): r
-        for r in payload["recommendations"]
+        (r["item_no"], r["variant_code"], r["location_code"]): r for r in payload["recommendations"]
     }
 
     assert set(by_sku) == {("ITEM-A", "", "BLUE"), ("ITEM-B", "RED", "GREEN")}

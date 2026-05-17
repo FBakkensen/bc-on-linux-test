@@ -10,11 +10,9 @@ import json
 from pathlib import Path
 
 import pandas as pd
-
 from extracts.bc_files import read_ile_summary
 
 from .recommender import SKU_COLUMNS, recommend
-
 
 DEFAULT_LEAD_TIME_DAYS = 7
 """Placeholder lead-time used by the walking skeleton. The real bootstrap
@@ -24,6 +22,7 @@ the lead-time extract in a later slice."""
 
 
 def run(extract_path: Path) -> Path:
+    """Read the ILE-summary CSV, write recommendations.json beside it, return that path."""
     extract_path = Path(extract_path)
     ile_summary = read_ile_summary(extract_path)
     observations = _aggregate_for_recommender(ile_summary, DEFAULT_LEAD_TIME_DAYS)
@@ -34,13 +33,12 @@ def run(extract_path: Path) -> Path:
     return output_path
 
 
-def _aggregate_for_recommender(
-    ile_summary: pd.DataFrame, lead_time_days: int
-) -> pd.DataFrame:
-    """Roll signed ILE bucket quantities into per-SKU rows the recommender
-    consumes. Daily demand is the mean signed bucket quantity, negated and
-    clamped at zero — negatives are demand, positives are returns netting
-    against it (ADR 0006)."""
+def _aggregate_for_recommender(ile_summary: pd.DataFrame, lead_time_days: int) -> pd.DataFrame:
+    """Roll signed ILE bucket quantities into per-SKU rows the recommender consumes.
+
+    Daily demand is the mean signed bucket quantity, negated and clamped at zero —
+    negatives are demand, positives are returns netting against it (ADR 0006).
+    """
     grouped = ile_summary.groupby(SKU_COLUMNS, sort=False)
     rows = []
     for (item_no, variant_code, location_code), group in grouped:

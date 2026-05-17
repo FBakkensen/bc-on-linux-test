@@ -13,6 +13,7 @@ import pandas as pd
 
 
 def read_ile_summary(extract_path: Path) -> pd.DataFrame:
+    """Read the ILE-summary CSV; empty variant_code is a valid no-variant SKU."""
     return pd.read_csv(
         extract_path,
         dtype={
@@ -53,7 +54,7 @@ def read_purchase_receipt_lt(extract_path: Path) -> pd.DataFrame:
     df = pd.read_csv(
         extract_path,
         dtype={
-            **{c: "string" for c in _PURCHASE_RECEIPT_LT_STR_COLUMNS},
+            **dict.fromkeys(_PURCHASE_RECEIPT_LT_STR_COLUMNS, "string"),
             "quantity": "float64",
         },
         keep_default_na=False,
@@ -68,10 +69,6 @@ def read_purchase_receipt_lt(extract_path: Path) -> pd.DataFrame:
     # would otherwise fail on an object-dtype empty column.
     for col in _PURCHASE_RECEIPT_LT_DATE_COLUMNS:
         df[col] = pd.to_datetime(df[col])
-    df["order_to_receipt_days"] = (
-        df["receipt_posting_date"] - df["po_order_date"]
-    ).dt.days
-    df["plan_to_receipt_days"] = (
-        df["receipt_posting_date"] - df["expected_receipt_date"]
-    ).dt.days
+    df["order_to_receipt_days"] = (df["receipt_posting_date"] - df["po_order_date"]).dt.days
+    df["plan_to_receipt_days"] = (df["receipt_posting_date"] - df["expected_receipt_date"]).dt.days
     return df

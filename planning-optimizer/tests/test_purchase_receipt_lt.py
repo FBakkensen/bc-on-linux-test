@@ -10,9 +10,7 @@ API-page seam.
 from pathlib import Path
 
 import pandas as pd
-
 from extracts.bc_files import read_purchase_receipt_lt
-
 
 HEADER = (
     "item_no,variant_code,location_code,vendor_no,po_order_date,"

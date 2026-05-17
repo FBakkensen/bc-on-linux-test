@@ -21,6 +21,7 @@ bc-linux/
 .bc-artifacts/
 .bc-cache/
 .symbols/
+.logs/
 
 # Reviewer-pack generated artifacts (regenerate via docs/reviewer-pack/README.md)
 docs/reviewer-pack/diagrams/*.png
@@ -28,10 +29,15 @@ docs/reviewer-pack/*.pdf
 
 # Python (planning-optimizer/ sibling package per ADR 0009)
 planning-optimizer/.venv/
+.venv-python-check/
 **/__pycache__/
 **/*.egg-info/
 **/.pytest_cache/
 **/.ipynb_checkpoints/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
 
 # OS / editor noise
 .DS_Store

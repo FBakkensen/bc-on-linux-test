@@ -17,8 +17,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Pinned exactly so `pip install -e .[dev]` and CI install the same versions.
+# Bump deliberately when adopting new rules (see scripts/check-python.sh).
 dev = [
-    "pytest>=8",
+    "pytest==9.0.3",
+    "pytest-cov==7.1.0",
+    "ruff==0.15.13",
+    "mypy==2.1.0",
+    "radon==6.0.1",
+    "xenon==0.9.3",
+    "pandas-stubs==3.0.0.260204",
 ]
 notebook = [
     "jupyter>=1",
@@ -29,4 +37,115 @@ packages = ["src/bc_planning_optimizer", "extracts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = [
+    "-ra",
+    "--cov=bc_planning_optimizer",
+    "--cov=extracts",
+    "--cov-report=term-missing",
+    "--cov-fail-under=90",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["bc_planning_optimizer", "extracts"]
+omit = [
+    # BC-talking seam: urllib.request against a live BC tier. Same exclusion logic
+    # as scripts/_extract_*.py — these are integration-test territory, not unit.
+    "*/extracts/bc_api.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-include = ["*.ipynb"]
+extend-exclude = [".build", ".bc-cache", ".alpackages", ".venv-python-check"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    # Formatter conflicts (Ruff docs explicitly recommend disabling these when using `ruff format`).
+    "COM812",  # missing-trailing-comma
+    "ISC001",  # single-line-implicit-string-concatenation
+    # Docstring-style conflicts; convention = "pep257" below already excludes the right ones,
+    # but list them explicitly so the intent is grep-able.
+    "D203",    # one-blank-line-before-class (conflicts with D211)
+    "D213",    # multi-line-summary-second-line (conflicts with D212)
+    # Math-domain notation. This is a planning-optimizer repo: docstrings reference
+    # ROP = mean(daily_demand) × mean(lead_time_days), α-quantile, receipt − po_order_date.
+    # The Unicode symbols are deliberate domain notation, not visual ambiguity bugs.
+    "RUF001",  # ambiguous-unicode-character-string
+    "RUF002",  # ambiguous-unicode-character-docstring
+    "RUF003",  # ambiguous-unicode-character-comment
+    # Over-strict exception-message rules. Force either custom exception classes or
+    # `msg = f"..."; raise X(msg)` ceremony for every one-off raise. Disabled in most
+    # mature strict-Ruff configs.
+    "EM101",   # raw-string-in-exception
+    "EM102",   # f-string-in-exception
+    "TRY003",  # raise-vanilla-args
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.per-file-ignores]
+# Filename-based globs (matched against the full path) so the same config
+# applies whether files live under planning-optimizer/ or in the repo-root
+# scripts/ directory. Anchored config-relative paths don't traverse up to
+# scripts/ from planning-optimizer/pyproject.toml.
+"**/test_*.py" = [
+    "S101",     # use-of-assert (assert is how pytest works)
+    "PLR2004",  # magic-value-comparison (literals are the spec in tests)
+    "D",        # all docstring rules (test names ARE the docs)
+    "ANN",      # all annotation rules (pytest fixtures don't gain from forced types)
+    "INP001",   # implicit-namespace-package
+]
+"**/conftest.py" = ["S101", "PLR2004", "D", "ANN", "INP001"]
+"**/*.ipynb" = [
+    "S101",
+    "PLR2004",
+    "D",
+    "ANN",
+    "INP001",
+    "T201",     # print is the notebook's display mechanism
+    "ERA001",   # commented-out-code (notebooks routinely keep prose-as-comments)
+]
+"**/__init__.py" = [
+    "D104",     # missing-docstring-in-public-package
+    "F401",     # __init__.py re-exports
+]
+"**/_extract_*.py" = [
+    "T201",     # print is the script progress UI
+    "INP001",   # top-level scripts are not a package
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+# Notebook files aren't mypy-checked (no native support); they're covered by Ruff.
+
+[[tool.mypy.overrides]]
+module = ["pandas.*"]
+# pandas-stubs covers the public API; this is a safety net for sub-modules
+# that aren't fully stubbed.
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Tests are the contract — the test name + assertions document intent. Forcing
+# `-> None` and pytest-fixture parameter types adds noise without catching real
+# bugs. Mirrors the Ruff ANN per-file-ignore for tests/.
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_untyped_calls = false

@@ -1,0 +1,36 @@
+name: Python Check
+
+# Strict-lint / type / complexity / coverage gate for the planning-optimizer
+# package and the repo-root extract scripts. Independent validation of whatever
+# the Copilot agent committed in its scripts/check-python.sh-driven inner loop,
+# parallel to bc-test.yml for the AL side.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  python-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          # Pin uv too so CI doesn't drift on tool resolution.
+          version: "0.5.x"
+
+      - name: Cache tool venv
+        uses: actions/cache@v4
+        with:
+          path: .venv-python-check
+          # Cache key derived from the pinned dev extras + script — invalidates
+          # automatically when either changes.
+          key: python-check-${{ runner.os }}-${{ hashFiles('planning-optimizer/pyproject.toml', 'scripts/check-python.sh') }}
+
+      - name: Run gate
+        run: bash scripts/check-python.sh

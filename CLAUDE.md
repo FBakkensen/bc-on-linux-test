@@ -33,6 +33,11 @@ cd bc-linux && docker compose up -d --wait
 #    tests in the running container. JUnit to .build/test-integration.xml.
 ./scripts/test-integration.sh
 
+# 6. Strict Python gate for planning-optimizer/ + scripts/_extract_*.py — Ruff
+#    (select=ALL) + mypy --strict + radon MI grade-A + xenon (CC) + pytest
+#    --cov-fail-under=90. Bootstraps a pinned tool venv via uv on first run.
+./scripts/check-python.sh
+
 # Verify BC is reachable
 curl -sf -u BCRUNNER:Admin123! http://localhost:7048/BC/ODataV4/Company
 
@@ -50,6 +55,7 @@ Pick the right tool for the loop you're in:
 
 - **Inner loop** (no BC container needed): `./scripts/compile.sh` for full-analyzer-set lint across all three projects (wraps `al-compile` / al-smart-compile, at `~/.local/bin/al-compile` — which is itself a hard dependency on the VS Code AL Language extension installed at `~/.vscode/extensions/ms-dynamics-smb.al-<ver>/`: the wrapper finds `bin/linux/alc` and the analyzer DLLs in `bin/Analyzers/` there. ALCops DLLs are dropped into the same `bin/Analyzers/` by the `arthurvdv.alcops` extension on first VS Code activation; see the `VS Code` section below for the CLI-only fallback); `./scripts/test-unit.sh` (BusinessCentral.AL.Runner, pinned in [`dotnet-tools.json`](dotnet-tools.json)) for transpile-and-run unit tests in ~6s warm. `al-runner` runs AL out-of-process by transpiling to C#/IL — fast, but doesn't fully simulate the BC platform (complex `TestPage` choreography, real DB state, permissions, lifecycle integration events beyond `--init-events`). Use it for pure-logic / library tests.
 - **Outer loop** (full BC tier): `./scripts/test-integration.sh` runs `compile.sh` (analyzers on) then `bc-linux/scripts/run-tests.sh` to publish + execute tests inside the running container — the only path that exercises real BC behaviour end-to-end.
+- **Python gate** (no BC container needed): `./scripts/check-python.sh` runs the strict Ruff + mypy + Radon/Xenon + pytest-cov stack against `planning-optimizer/` and the repo-root `scripts/_extract_*.py`. Mirrors the AL `compile.sh` posture: fail-fast, agent-driven inner loop, same fix-everything-day-1 rollout as the AL 240-rule ruleset. Tool versions are pinned in `planning-optimizer/pyproject.toml` and installed into `.venv-python-check/` via `uv` on first run; bump deliberately in a dedicated commit. CI runs the same script via `.github/workflows/python-check.yml`. Coverage scope excludes `extracts/bc_api.py` (live-BC seam, integration territory).
 - **Mutation testing**: `./scripts/test-mutation.sh` (al-mutate). Currently flaky due to upstream issues; check the project notes before relying on it.
 
 ## Architecture & flow
@@ -72,6 +78,14 @@ The integration test pipeline is a fixed sequence in [`scripts/test-integration.
 Open [`bc-on-linux-test.code-workspace`](bc-on-linux-test.code-workspace) at the repo root — a multi-root workspace with `app/`, `test/`, and `integration-test/` as folders. The workspace settings point `al.packageCachePath` at the shared `../.alpackages/` and wire `al.codeAnalyzers` to the Microsoft analyzers (`CodeCop`, `UICop`, `PerTenantExtensionCop`) plus the ALCops set (`Common`, `LinterCop`, `ApplicationCop`, `FormattingCop`, `PlatformCop`, `DocumentationCop`, `TestAutomationCop`). Recommended extensions are `ms-dynamics-smb.al` and `arthurvdv.alcops` — the latter auto-downloads the ALCops analyzer DLLs from the [`ALCops.Analyzers`](https://www.nuget.org/packages/ALCops.Analyzers) NuGet package into the AL extension's `bin/Analyzers/` folder on first activation. If you need them without launching VS Code (e.g. a fresh CLI-only setup), pull the `lib/net8.0/` DLLs from that NuGet package into the same folder by hand.
 
 Each AL project has its own `.vscode/launch.json` with a `BC Linux` profile pointed at the local dev endpoint. For F5 publish, use `BCRUNNER` / `Admin123!`.
+
+## AL MCP server
+
+[`.mcp.json`](.mcp.json) wires an `al` MCP server via [`scripts/al-mcp.sh`](scripts/al-mcp.sh), which locates the AL Language extension dynamically and runs `altool launchmcpserver app test integration-test --transport stdio --packagecachepath ../.alpackages --ruleset ../custom.ruleset.json --codeanalyzers ...`. Tools surface as `mcp__al__al_<name>`: `al_symbolsearch`, `al_compile`, `al_build`, `al_getdiagnostics`, `al_getpackagedependencies`, `al_downloadsymbols`, `al_symbolsearch`, `al_publish`, `al_run_tests`, `al_auth_login`, `al_auth_logout`.
+
+**Use `mcp__al__al_symbolsearch` for any BC-symbol question** — it indexes project code *plus* every Microsoft app in `.alpackages/` (BaseApp, System Application, …), returning name, kind, namespace, full signature, docs, and source path for project-owned symbols. Far better than filesystem grep or docs lookup. Schema quirk: arguments wrap in a `parameters` object — `{"parameters":{"query":"…","filters":{…}}}`. Patterns: find an object → `query="Customer", filters.kinds=["Table"]`; list its members → `query="*", filters.objectName="Customer", filters.memberKinds=["Field"]`; scope with `filters.scope="project"|"dependencies"|"all"`.
+
+**Do NOT rely on `al_compile` / `al_build` as a substitute for `scripts/compile.sh`.** Empirically (AL Language extension 17.0.2273547, Linux): the analyzer pass does not fire from the MCP path. `--codeanalyzers` at startup is parsed but silently no-ops (bogus DLL paths don't error); per-call `enableCodeAnalysis: true` + `codeAnalyzers: [...]` also doesn't emit AA*/AC*/PC*/UICop/ALCops codes. Only core compiler errors (AL0118, AL0134, …) appear. `compile.sh` remains the canonical 240-rule strictness gate. Other Linux quirks: `al_build` needs an **absolute** `projectPath` (relative fails with `Invalid URI: The format of the URI could not be determined`); `--ruleset` and `--packagecachepath` resolve **per-project relative**, which is why the wrapper uses `../custom.ruleset.json`. Re-run the canary protocol (add `_canary.al` with unused-var + bad filename, diff `compile.sh` vs `al_compile`) on each AL extension bump — when the analyzer pass starts firing, the positioning above flips.
 
 ## Agent skills
 
