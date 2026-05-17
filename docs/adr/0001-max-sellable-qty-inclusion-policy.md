@@ -56,3 +56,28 @@ Four places BC standard itself is ambiguous or inconsistent, where we picked a s
    tracking. Lot-/serial-aware ATP is a substantively different problem
    (allocation of specific tracked units across competing demands over time)
    and is explicitly out of scope.
+
+## Where the deviations live
+
+Originally encoded in one place: `BCEventSource.CollectEvents` (the scalar
+Max Sellable path). Slice #15 added the Open SD per-source AL Queries
+(`Open SD Sales`, `Open SD Prod Order Line`, …) as the simulator's
+initial-state extract per ADR 0007; those Queries serve a paginated OData
+GET and therefore can't call back into `BCEventSource` server-side. The
+result is that the inclusion policy now has two encodings:
+
+- **Deviations #1 (production statuses) and #2 (assembly blanket)** —
+  re-encoded in each Open SD Query's `DataItemTableFilter`, mirroring
+  what `FilterLinesWithItemToPlan` / `SetItemToPlanFilters` apply on the
+  scalar path.
+- **Deviation #3 (job double-count)** — moved Python-side, in
+  `extracts/bc_api.project_job_planning`. A SELECT can't emit a row
+  twice, so the doubling can't live in AL.
+- **Deviation #4 (SKU granularity)** — inherent in both paths; nothing
+  to encode.
+
+Drift between the two encodings is held by the
+`OpenSDQueryTests` integration tests (one per Query, pinning each
+deviation server-side) plus the projection-helper unit tests
+(`tests/test_open_sd_projection.py`). A change to the inclusion policy
+that lands in only one place fails CI loudly.

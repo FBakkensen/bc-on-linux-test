@@ -32,6 +32,37 @@ ENTRY_KIND_OUTPUT: Final = "output"
 ENTRY_KIND_CONSUMPTION: Final = "consumption"
 
 
+def _read_extract_csv(
+    extract_path: Path,
+    *,
+    str_cols: tuple[str, ...],
+    date_cols: tuple[str, ...],
+    extra_dtypes: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    """Read a BC extract CSV with the BC-zero-date convention.
+
+    BC's uninitialised Date OData-serialises as "0001-01-01" rather than
+    JSON null; both that and empty cells collapse to NaT here so
+    downstream `.dt` math doesn't see ~700,000-day-future events. The
+    coercion runs as a separate `pd.to_datetime` loop (instead of
+    `parse_dates=...`) so the column dtype is datetime64 even on a
+    zero-row frame — `parse_dates` leaves an object-dtype column when
+    nothing matched.
+    """
+    dtype: dict[str, str] = dict.fromkeys(str_cols, "string")
+    if extra_dtypes:
+        dtype.update(extra_dtypes)
+    df = pd.read_csv(
+        extract_path,
+        dtype=dtype,  # type: ignore[arg-type]
+        keep_default_na=False,
+        na_values={c: ["", "0001-01-01"] for c in date_cols},
+    )
+    for col in date_cols:
+        df[col] = pd.to_datetime(df[col])
+    return df
+
+
 def read_ile_summary(extract_path: Path) -> pd.DataFrame:
     """Read the ILE-summary CSV; empty variant_code is a valid no-variant SKU."""
     return pd.read_csv(
@@ -69,26 +100,16 @@ def read_purchase_receipt_lt(extract_path: Path) -> pd.DataFrame:
 
     `plan_to_receipt_days` = `receipt_posting_date − expected_receipt_date`.
     Feeds the `Supplier reliability` reason codes; does NOT feed LTD bootstrap.
-    Null where the PO carried no Expected Receipt Date at creation time.
+    Null where the PO carried no Expected Receipt Date at creation time, or
+    where the source PO has been deleted (left-outer join emits ""):
+    `_read_extract_csv` collapses both forms to NaT.
     """
-    df = pd.read_csv(
+    df = _read_extract_csv(
         extract_path,
-        dtype={
-            **dict.fromkeys(_PURCHASE_RECEIPT_LT_STR_COLUMNS, "string"),
-            "quantity": "float64",
-        },
-        keep_default_na=False,
-        # "" is the JSON-null path (left-outer-joined Purchase Header is
-        # gone); "0001-01-01" is BC's uninitialised Date (0D) — both mean
-        # "no value" and must collapse to NaT here so plan_to_receipt isn't
-        # polluted with ~700,000-day deltas.
-        na_values={c: ["", "0001-01-01"] for c in _PURCHASE_RECEIPT_LT_DATE_COLUMNS},
+        str_cols=_PURCHASE_RECEIPT_LT_STR_COLUMNS,
+        date_cols=_PURCHASE_RECEIPT_LT_DATE_COLUMNS,
+        extra_dtypes={"quantity": "float64"},
     )
-    # Coerce explicitly (instead of relying on `parse_dates`) so the dtype is
-    # datetime64 even when the CSV has zero data rows — downstream `.dt` math
-    # would otherwise fail on an object-dtype empty column.
-    for col in _PURCHASE_RECEIPT_LT_DATE_COLUMNS:
-        df[col] = pd.to_datetime(df[col])
     df["order_to_receipt_days"] = (df["receipt_posting_date"] - df["po_order_date"]).dt.days
     df["plan_to_receipt_days"] = (df["receipt_posting_date"] - df["expected_receipt_date"]).dt.days
     return df
@@ -122,14 +143,11 @@ def read_production_lt(extract_path: Path) -> pd.DataFrame:
     share the same sample (per ADR 0006). `shared_sample_key = prod_order_no`
     so the bootstrap can deduplicate.
     """
-    df = pd.read_csv(
+    df = _read_extract_csv(
         extract_path,
-        dtype=dict.fromkeys(_PRODUCTION_LT_STR_COLUMNS, "string"),
-        keep_default_na=False,
-        na_values={c: ["", "0001-01-01"] for c in _PRODUCTION_LT_DATE_COLUMNS},
+        str_cols=_PRODUCTION_LT_STR_COLUMNS,
+        date_cols=_PRODUCTION_LT_DATE_COLUMNS,
     )
-    for col in _PRODUCTION_LT_DATE_COLUMNS:
-        df[col] = pd.to_datetime(df[col])
     # BC's ILE "Entry Type" enum serialises as "Output" / "Consumption"; we
     # match against lowercase literals so the seam is tolerant of either
     # casing from upstream.
@@ -201,14 +219,11 @@ def read_assembly_lt(extract_path: Path) -> pd.DataFrame:
     `lead_time_days = posting_date - starting_date` per ADR 0006. Always uses
     the assembly header dates — no ILE fallback path.
     """
-    df = pd.read_csv(
+    df = _read_extract_csv(
         extract_path,
-        dtype=dict.fromkeys(_ASSEMBLY_LT_STR_COLUMNS, "string"),
-        keep_default_na=False,
-        na_values={c: ["", "0001-01-01"] for c in _ASSEMBLY_LT_DATE_COLUMNS},
+        str_cols=_ASSEMBLY_LT_STR_COLUMNS,
+        date_cols=_ASSEMBLY_LT_DATE_COLUMNS,
     )
-    for col in _ASSEMBLY_LT_DATE_COLUMNS:
-        df[col] = pd.to_datetime(df[col])
     df["lead_time_days"] = (df["posting_date"] - df["starting_date"]).dt.days
     df["replenishment_system"] = REPLENISHMENT_ASSEMBLY
     df["source"] = SOURCE_ASSEMBLY_HEADER
@@ -237,16 +252,12 @@ def read_transfer_lt(extract_path: Path) -> pd.DataFrame:
     Unmatched rows (source without dest, or dest without source — typical for
     transfer-in-transit at extract time) are excluded.
     """
-    df = pd.read_csv(
+    df = _read_extract_csv(
         extract_path,
-        dtype={
-            **dict.fromkeys(_TRANSFER_LT_STR_COLUMNS, "string"),
-            "quantity": "float64",
-        },
-        keep_default_na=False,
-        na_values={"posting_date": ["", "0001-01-01"]},
+        str_cols=_TRANSFER_LT_STR_COLUMNS,
+        date_cols=("posting_date",),
+        extra_dtypes={"quantity": "float64"},
     )
-    df["posting_date"] = pd.to_datetime(df["posting_date"])
 
     source = df[df["quantity"] < 0].rename(columns={"posting_date": "_source_date"})[
         ["document_no", "item_no", "variant_code", "_source_date"]
@@ -266,3 +277,56 @@ def read_transfer_lt(extract_path: Path) -> pd.DataFrame:
     paired["shared_sample_key"] = paired["document_no"]
     paired["plan_to_actual_days"] = pd.NA
     return paired.drop(columns=["_source_date", "_dest_date"])
+
+
+_OPEN_SD_EVENT_STR_COLUMNS = (
+    "item_no",
+    "variant_code",
+    "location_code",
+    "source_kind",
+)
+
+
+def snapshot_from_ile_summary(ile_summary: pd.DataFrame, as_of_date: pd.Timestamp) -> pd.DataFrame:
+    """Project today's on-hand per SKU by summing ILE up to `as_of_date`.
+
+    The snapshot side of the simulator's initial state (ADR 0007). One row
+    per `(item_no, variant_code, location_code)` with `snapshot_inventory =
+    sum(quantity)` over `posting_date <= as_of_date`. Mirrors what
+    `MaxSellableCalc.StartingOnHandAt` computes from ILE — no new AL
+    surface needed; the summary extract already carries the rows.
+
+    SKUs whose first ILE row is after `as_of_date` are excluded: there's
+    no inventory yet, so they're not part of "today's projected balance."
+    """
+    sku_cols = ["item_no", "variant_code", "location_code"]
+    if ile_summary.empty:
+        return pd.DataFrame(
+            {
+                "item_no": pd.Series(dtype="string"),
+                "variant_code": pd.Series(dtype="string"),
+                "location_code": pd.Series(dtype="string"),
+                "snapshot_inventory": pd.Series(dtype="float64"),
+            },
+        )
+    eligible = ile_summary[ile_summary["posting_date"] <= as_of_date]
+    return eligible.groupby(sku_cols, as_index=False).agg(
+        snapshot_inventory=("quantity", "sum"),
+    )
+
+
+def read_open_sd_events(extract_path: Path) -> pd.DataFrame:
+    """Read the open Supply & Demand event stream CSV.
+
+    One row per open commitment line collected by the per-source Open SD
+    Queries (ADR 0001 inclusion policy), seeding the Fidelity-B simulator's
+    initial state per ADR 0007. `signed_quantity` is positive for supply,
+    negative for demand. `source_kind` tags which BC source the row came
+    from.
+    """
+    return _read_extract_csv(
+        extract_path,
+        str_cols=_OPEN_SD_EVENT_STR_COLUMNS,
+        date_cols=("event_date",),
+        extra_dtypes={"signed_quantity": "float64"},
+    )

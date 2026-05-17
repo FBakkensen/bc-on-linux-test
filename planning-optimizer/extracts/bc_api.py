@@ -18,6 +18,7 @@ import os
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, cast
 
 # JSON-shaped rows: keys are the snake_case column names; values come from BC's
@@ -80,6 +81,95 @@ TRANSFER_LT_CAMEL_TO_SNAKE = {
     "quantity": "quantity",
 }
 TRANSFER_LT_COLUMNS = list(TRANSFER_LT_CAMEL_TO_SNAKE.values())
+
+# Per-source AL Query mappings for the open Supply & Demand event stream
+# (ADR 0001 inclusion policy, ADR 0007 simulator seed). Each Query exposes
+# its native BC column shape; the fetchers below project each row into the
+# unified event shape consumers see.
+OPEN_SD_SALES_CAMEL_TO_SNAKE = {
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "shipmentDate": "event_date",
+    "outstandingQtyBase": "qty",
+    "documentType": "document_type",
+}
+OPEN_SD_PURCHASE_CAMEL_TO_SNAKE = {
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "expectedReceiptDate": "event_date",
+    "outstandingQtyBase": "qty",
+    "documentType": "document_type",
+}
+OPEN_SD_TRANSFER_IN_CAMEL_TO_SNAKE = {
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "receiptDate": "event_date",
+    "outstandingQtyBase": "qty",
+}
+OPEN_SD_TRANSFER_OUT_CAMEL_TO_SNAKE = {
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "shipmentDate": "event_date",
+    "outstandingQtyBase": "qty",
+}
+OPEN_SD_SERVICE_CAMEL_TO_SNAKE = {
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "neededByDate": "event_date",
+    "outstandingQtyBase": "qty",
+}
+OPEN_SD_PROD_ORDER_LINE_CAMEL_TO_SNAKE = {
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "dueDate": "event_date",
+    "remainingQtyBase": "qty",
+}
+OPEN_SD_ASSEMBLY_HEADER_CAMEL_TO_SNAKE = {
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "dueDate": "event_date",
+    "remainingQtyBase": "qty",
+}
+OPEN_SD_JOB_PLANNING_CAMEL_TO_SNAKE = {
+    "itemNo": "item_no",
+    "variantCode": "variant_code",
+    "locationCode": "location_code",
+    "planningDate": "event_date",
+    "remainingQtyBase": "qty",
+    "lineType": "line_type",
+}
+
+OPEN_SD_EVENT_COLUMNS = [
+    "item_no",
+    "variant_code",
+    "location_code",
+    "event_date",
+    "signed_quantity",
+    "source_kind",
+]
+
+# Source-kind tags — match the BCEventSource per-source AppendEvent calls so
+# drift between the Query path and the existing scalar-Max-Sellable path is
+# detectable (integration test asserts the two agree on the same fixture).
+SOURCE_SALES_ORDER = "sales_order"
+SOURCE_SALES_RETURN_ORDER = "sales_return_order"
+SOURCE_PURCHASE_ORDER = "purchase_order"
+SOURCE_PURCHASE_RETURN_ORDER = "purchase_return_order"
+SOURCE_TRANSFER_IN = "transfer_in"
+SOURCE_TRANSFER_OUT = "transfer_out"
+SOURCE_SERVICE_LINE = "service_line"
+SOURCE_PROD_ORDER_LINE = "prod_order_line"
+SOURCE_PROD_ORDER_COMPONENT = "prod_order_component"
+SOURCE_ASSEMBLY_HEADER = "assembly_header"
+SOURCE_ASSEMBLY_LINE = "assembly_line"
+SOURCE_JOB_PLANNING_LINE = "job_planning_line"
 
 
 @dataclass(frozen=True)
@@ -145,6 +235,133 @@ def fetch_transfer_lt(config: BcApiConfig) -> list[JsonRow]:
     return _fetch_paginated(config, "transferLT", TRANSFER_LT_CAMEL_TO_SNAKE)
 
 
+def fetch_open_sd_events(config: BcApiConfig) -> list[JsonRow]:
+    """Concatenate every open Supply & Demand source into the unified event shape.
+
+    One round-trip per AL Query endpoint; per-source projection lives in the
+    `project_*` helpers below. Equivalent to BCEventSource.CollectEvents
+    looped across every Item — the integration test asserts that equivalence
+    on a controlled fixture (ADR 0001 inclusion list, ADR 0007 simulator seed).
+    """
+    sources = (
+        ("openSDSales", OPEN_SD_SALES_CAMEL_TO_SNAKE, project_sales),
+        ("openSDPurchase", OPEN_SD_PURCHASE_CAMEL_TO_SNAKE, project_purchase),
+        ("openSDTransferIn", OPEN_SD_TRANSFER_IN_CAMEL_TO_SNAKE, project_transfer_in),
+        ("openSDTransferOut", OPEN_SD_TRANSFER_OUT_CAMEL_TO_SNAKE, project_transfer_out),
+        ("openSDService", OPEN_SD_SERVICE_CAMEL_TO_SNAKE, project_service),
+        ("openSDProdOrderLine", OPEN_SD_PROD_ORDER_LINE_CAMEL_TO_SNAKE, project_prod_order_line),
+        ("openSDProdOrderComp", OPEN_SD_PROD_ORDER_LINE_CAMEL_TO_SNAKE, project_prod_order_comp),
+        ("openSDAssemblyHeader", OPEN_SD_ASSEMBLY_HEADER_CAMEL_TO_SNAKE, project_assembly_header),
+        ("openSDAssemblyLine", OPEN_SD_ASSEMBLY_HEADER_CAMEL_TO_SNAKE, project_assembly_line),
+        ("openSDJobPlanning", OPEN_SD_JOB_PLANNING_CAMEL_TO_SNAKE, project_job_planning),
+    )
+    rows: list[JsonRow] = []
+    for entity_set, mapping, projector in sources:
+        rows.extend(projector(_fetch_paginated(config, entity_set, mapping)))
+    return rows
+
+
+def _normalize_enum(value: object) -> str:
+    """Collapse BC enum serialization variants to a single comparable key.
+
+    BC OData has serialized enum captions both with spaces ("Return Order",
+    "Both Budget and Billable") and without ("ReturnOrder",
+    "BothBudgetAndBillable") across releases — collapse both forms so a
+    single equality check works.
+    """
+    return str(value).replace(" ", "").lower() if value is not None else ""
+
+
+def _event_row(row: JsonRow, source_kind: str, sign: int) -> JsonRow:
+    return {
+        "item_no": row["item_no"],
+        "variant_code": row["variant_code"],
+        "location_code": row["location_code"],
+        "event_date": row["event_date"],
+        "signed_quantity": sign * float(row["qty"]),
+        "source_kind": source_kind,
+    }
+
+
+def project_sales(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Sales rows: Order → demand (-), Return Order → supply (+)."""
+    out: list[JsonRow] = []
+    for r in rows:
+        is_return = _normalize_enum(r.get("document_type")) == "returnorder"
+        kind = SOURCE_SALES_RETURN_ORDER if is_return else SOURCE_SALES_ORDER
+        sign = 1 if is_return else -1
+        out.append(_event_row(r, kind, sign))
+    return out
+
+
+def project_purchase(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Purchase rows: Order → supply (+), Return Order → demand (-)."""
+    out: list[JsonRow] = []
+    for r in rows:
+        is_return = _normalize_enum(r.get("document_type")) == "returnorder"
+        kind = SOURCE_PURCHASE_RETURN_ORDER if is_return else SOURCE_PURCHASE_ORDER
+        sign = -1 if is_return else 1
+        out.append(_event_row(r, kind, sign))
+    return out
+
+
+def project_transfer_in(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Transfer In rows: receipt-side supply at destination.
+
+    BC's IsReceipt=true filter doesn't add Outstanding<>0 (only the
+    IsReceipt=false path does), so we drop zero-qty rows here to keep
+    fully-received in-transits out of the event stream.
+    """
+    return [_event_row(r, SOURCE_TRANSFER_IN, 1) for r in rows if float(r["qty"]) != 0]
+
+
+def project_transfer_out(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Transfer Out rows: shipment-side demand at source."""
+    return [_event_row(r, SOURCE_TRANSFER_OUT, -1) for r in rows]
+
+
+def project_service(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Service rows: always demand (-)."""
+    return [_event_row(r, SOURCE_SERVICE_LINE, -1) for r in rows]
+
+
+def project_prod_order_line(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Prod Order Line rows: output side is supply (+)."""
+    return [_event_row(r, SOURCE_PROD_ORDER_LINE, 1) for r in rows]
+
+
+def project_prod_order_comp(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Prod Order Component rows: consumption side is demand (-)."""
+    return [_event_row(r, SOURCE_PROD_ORDER_COMPONENT, -1) for r in rows]
+
+
+def project_assembly_header(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Assembly Header rows: assembled output is supply (+)."""
+    return [_event_row(r, SOURCE_ASSEMBLY_HEADER, 1) for r in rows]
+
+
+def project_assembly_line(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Assembly Line rows: component consumption is demand (-)."""
+    return [_event_row(r, SOURCE_ASSEMBLY_LINE, -1) for r in rows]
+
+
+def project_job_planning(rows: list[JsonRow]) -> list[JsonRow]:
+    """Project Open SD Job Planning rows: demand (-), with double-emit per ADR 0001 dev #3.
+
+    BC's Job availability views count Line Type = "Both Budget and Billable"
+    twice (once as Budget, once as Billable). We replicate the double-count
+    Python-side rather than re-encoding it in AL — a single SELECT can't
+    emit a row twice.
+    """
+    out: list[JsonRow] = []
+    for r in rows:
+        event = _event_row(r, SOURCE_JOB_PLANNING_LINE, -1)
+        out.append(event)
+        if _normalize_enum(r.get("line_type")) == "bothbudgetandbillable":
+            out.append(event)
+    return out
+
+
 def _fetch_paginated(
     config: BcApiConfig, entity_set: str, mapping: dict[str, str]
 ) -> list[JsonRow]:
@@ -158,7 +375,11 @@ def _fetch_paginated(
     return rows
 
 
+@lru_cache(maxsize=8)
 def _resolve_company_id(config: BcApiConfig) -> str:
+    # Cached so a multi-endpoint extract (e.g. fetch_open_sd_events hits 10
+    # Queries) pays the /companies round-trip once. BcApiConfig is frozen,
+    # so equality keys correctly on (base_url, auth, company_name).
     data = _get_json(config, f"{config.base_url}{API_PATH}/companies")
     for company in data["value"]:
         if company["name"] == config.company_name:

@@ -14,11 +14,18 @@ workstream.
 
 For each `(Item, Variant, Location, parameter set)`:
 
-1. **Seeds initial state from the existing Max Sellable event stream**
-   (ADR 0001 inclusion policy). Today's projected balance, scheduled
-   supplies, and committed demand land in the simulator's start state
-   unchanged — same code, same inclusion list, no parallel implementation
-   of "what is supply / what is demand right now".
+1. **Seeds initial state from the Open SD per-source extract** (slice
+   #15), which mirrors the same ADR 0001 inclusion list as the scalar
+   Max Sellable path. Today's projected balance comes from summing the
+   existing Item Ledger Summary extract up to today
+   (`snapshot_from_ile_summary`); the signed event stream of open
+   commitments comes from 10 per-source AL Queries (`Open SD Sales`,
+   `Open SD Purchase`, …) projected into a unified shape Python-side
+   (`fetch_open_sd_events`). The Queries can't call back into
+   `BCEventSource` server-side, so the inclusion-list filters are
+   re-encoded in each Query's `DataItemTableFilter`; drift between the
+   two encodings is held by the `OpenSDQueryTests` integration tests
+   (see ADR 0001).
 2. **Samples future demand** per period via bootstrap-shift-by-forecast
    (ADR 0006).
 3. **Walks forward**, applying the BC reordering policy:

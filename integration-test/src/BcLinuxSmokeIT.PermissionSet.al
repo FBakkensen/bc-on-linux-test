@@ -18,6 +18,7 @@ permissionset 50199 "Bc Linux Smoke IT"
         codeunit "Max Sellable Perf Fixture" = X,
         codeunit "Max Sellable Perf Typical" = X,
         codeunit "Max Sellable Skeleton Tests" = X,
+        codeunit "Open SD Query Tests" = X,
         codeunit "Prod Order Evt Src Tests" = X,
         codeunit "Production LT Query Tests" = X,
         codeunit "Purch Line Evt Src Tests" = X,
