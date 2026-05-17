@@ -1,6 +1,15 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using Microsoft.Purchases.Document;
+using Microsoft.Purchases.History;
+
 query 50001 "Purchase Receipt LT"
 {
     QueryType = API;
+    Access = Public;
+    Permissions = tabledata "Purch. Rcpt. Line" = R,
+                  tabledata "Purch. Rcpt. Header" = R,
+                  tabledata "Purchase Header" = R;
     APIPublisher = 'fbakkensen';
     APIGroup = 'planningOptimizer';
     APIVersion = 'v1.0';

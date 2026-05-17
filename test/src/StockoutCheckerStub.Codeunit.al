@@ -1,5 +1,12 @@
+namespace FBakkensen.BcLinuxSmoke.Tests;
+
+using FBakkensen.BcLinuxSmoke;
+using Microsoft.Sales.Document;
+
 codeunit 50102 "Stockout Checker Stub" implements "IStockoutChecker"
 {
+    Access = Internal;
+
     var
         StockoutHits: Boolean;
 

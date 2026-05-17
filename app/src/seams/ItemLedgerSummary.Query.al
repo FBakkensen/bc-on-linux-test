@@ -1,6 +1,12 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using Microsoft.Inventory.Ledger;
+
 query 50000 "Item Ledger Summary"
 {
     QueryType = API;
+    Access = Public;
+    Permissions = tabledata "Item Ledger Entry" = R;
     APIPublisher = 'fbakkensen';
     APIGroup = 'planningOptimizer';
     APIVersion = 'v1.0';

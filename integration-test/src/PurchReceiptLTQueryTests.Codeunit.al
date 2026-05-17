@@ -1,6 +1,17 @@
+namespace FBakkensen.BcLinuxSmoke.IT;
+
+using FBakkensen.BcLinuxSmoke;
+using Microsoft.Purchases.Document;
+using Microsoft.Purchases.History;
+using System.TestLibraries.Utilities;
+
 codeunit 50164 "Purch Receipt LT Query Tests"
 {
     Subtype = Test;
+    Access = Internal;
+    Permissions = tabledata "Purch. Rcpt. Line" = I,
+                  tabledata "Purch. Rcpt. Header" = I,
+                  tabledata "Purchase Header" = I;
 
     var
         Assert: Codeunit "Library Assert";

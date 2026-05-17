@@ -1,6 +1,11 @@
+namespace FBakkensen.BcLinuxSmoke.IT;
+
+using System.TestLibraries.Utilities;
+
 codeunit 50150 "Max Sellable Skeleton Tests"
 {
     Subtype = Test;
+    Access = Internal;
 
     var
         Assert: Codeunit "Library Assert";

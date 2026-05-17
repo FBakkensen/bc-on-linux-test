@@ -1,5 +1,13 @@
+namespace FBakkensen.BcLinuxSmoke.Tests;
+
+using FBakkensen.BcLinuxSmoke;
+using Microsoft.Inventory.Item;
+using Microsoft.Sales.Document;
+
 codeunit 50101 "Event Source Stub" implements "IEventSource"
 {
+    Access = Internal;
+
     var
         FixtureDates: List of [Date];
         FixtureQtys: List of [Decimal];
@@ -29,7 +37,7 @@ codeunit 50101 "Event Source Stub" implements "IEventSource"
                 EventBuf."Entry No." := EventBuf.Count() + 1;
                 EventBuf."Event Date" := FixtureDates.Get(i);
                 EventBuf."Signed Quantity (Base)" := FixtureQtys.Get(i);
-                EventBuf.Insert();
+                EventBuf.Insert(false);
             end;
         end;
     end;

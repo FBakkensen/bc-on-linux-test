@@ -1,5 +1,10 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using Microsoft.Sales.Document;
+
 codeunit 50005 "Max Sellable PBT"
 {
+    Access = Public;
     TableNo = "Sales Line";
 
     trigger OnRun()
@@ -17,11 +22,7 @@ codeunit 50005 "Max Sellable PBT"
         ExcludingSalesLine: Record "Sales Line";
         MaxSellableCalc: Codeunit "Max Sellable Calc";
         BCEventSource: Codeunit "BC Event Source";
-        BCStockoutChecker: Codeunit "BC Stockout Checker";
-        BCNotificationDispatcher: Codeunit "BC Notification Dispatcher";
         EventSource: Interface "IEventSource";
-        StockoutChecker: Interface "IStockoutChecker";
-        NotificationDispatcher: Interface "INotificationDispatcher";
         ItemNo: Code[20];
         VariantCode: Code[10];
         LocationCode: Code[10];
@@ -35,12 +36,10 @@ codeunit 50005 "Max Sellable PBT"
         SetExcludingSalesLine(ExcludingSalesLine, Params);
 
         EventSource := BCEventSource;
-        StockoutChecker := BCStockoutChecker;
-        NotificationDispatcher := BCNotificationDispatcher;
 
         Qty := MaxSellableCalc.Calculate(
             ItemNo, VariantCode, LocationCode, ShipmentDate, ExcludingSalesLine,
-            EventSource, StockoutChecker, NotificationDispatcher);
+            EventSource);
 
         Results.Add('Qty', Format(Qty, 0, 9));
     end;

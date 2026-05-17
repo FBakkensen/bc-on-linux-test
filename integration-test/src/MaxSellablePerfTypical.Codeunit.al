@@ -1,6 +1,9 @@
+namespace FBakkensen.BcLinuxSmoke.IT;
+
 codeunit 50160 "Max Sellable Perf Typical"
 {
     Subtype = Test;
+    Access = Internal;
 
     [Test]
     procedure TypicalScaleRunGatedFlowFitsTypingBudget()

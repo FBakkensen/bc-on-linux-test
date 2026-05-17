@@ -1,3 +1,7 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using Microsoft.Sales.Setup;
+
 pageextension 50000 "Sales Recv Setup Page Ext" extends "Sales & Receivables Setup"
 {
     layout
@@ -8,7 +12,7 @@ pageextension 50000 "Sales Recv Setup Page Ext" extends "Sales & Receivables Set
             {
                 ApplicationArea = Basic, Suite;
                 Editable = Rec."Stockout Warning";
-                ToolTip = 'If enabled, BC warns when a Sales Line quantity exceeds the Max Sellable Quantity (ATP). The field becomes editable only when Stockout Warning is enabled, and is cleared automatically when Stockout Warning is turned off.';
+                ToolTip = 'Specifies whether BC warns when a Sales Line quantity exceeds the Max Sellable Quantity. Editable only when Stockout Warning is on.';
             }
         }
     }

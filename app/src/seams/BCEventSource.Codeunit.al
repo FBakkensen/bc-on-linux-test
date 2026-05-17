@@ -1,6 +1,26 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using Microsoft.Assembly.Document;
+using Microsoft.Inventory.Item;
+using Microsoft.Inventory.Transfer;
+using Microsoft.Manufacturing.Document;
+using Microsoft.Projects.Project.Planning;
+using Microsoft.Purchases.Document;
+using Microsoft.Sales.Document;
+using Microsoft.Service.Document;
+
 codeunit 50001 "BC Event Source" implements "IEventSource"
 {
     Access = Public;
+    Permissions = tabledata "Sales Line" = R,
+                  tabledata "Purchase Line" = R,
+                  tabledata "Transfer Line" = R,
+                  tabledata "Service Line" = R,
+                  tabledata "Prod. Order Line" = R,
+                  tabledata "Prod. Order Component" = R,
+                  tabledata "Job Planning Line" = R,
+                  tabledata "Assembly Header" = R,
+                  tabledata "Assembly Line" = R;
 
     procedure CollectEvents(var Item: Record Item; var ExcludingSalesLine: Record "Sales Line"; var EventBuf: Record "Max Sellable Event Buf" temporary)
     begin
@@ -151,6 +171,6 @@ codeunit 50001 "BC Event Source" implements "IEventSource"
         EventBuf."Entry No." := EventBuf.Count() + 1;
         EventBuf."Event Date" := EventDate;
         EventBuf."Signed Quantity (Base)" := SignedQtyBase;
-        EventBuf.Insert();
+        EventBuf.Insert(false);
     end;
 }

@@ -1,4 +1,8 @@
+namespace FBakkensen.BcLinuxSmoke;
+
 interface "INotificationDispatcher"
 {
-    procedure Dispatch(var Notif: Notification; CallerRecID: RecordID)
+    Access = Public;
+
+    procedure Dispatch(var Notif: Notification; CallerRecId: RecordId)
 }

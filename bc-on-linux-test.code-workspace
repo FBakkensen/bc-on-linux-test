@@ -12,6 +12,7 @@
     },
     "settings": {
         "al.enableCodeAnalysis": true,
+        "al.ruleSetPath": "../custom.ruleset.json",
         "al.codeAnalyzers": [
             "${CodeCop}",
             "${UICop}",

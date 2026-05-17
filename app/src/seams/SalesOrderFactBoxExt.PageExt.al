@@ -1,3 +1,7 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using Microsoft.Sales.Document;
+
 pageextension 50001 "Sales Order FactBox Ext" extends "Sales Order"
 {
     layout

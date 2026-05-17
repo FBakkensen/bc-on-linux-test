@@ -1,9 +1,15 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using System.Environment.Configuration;
+
 codeunit 50004 "BC Notification Dispatcher" implements "INotificationDispatcher"
 {
-    procedure Dispatch(var Notif: Notification; CallerRecID: RecordID)
+    Access = Public;
+
+    procedure Dispatch(var Notif: Notification; CallerRecId: RecordId)
     var
         NotifLifecycleMgt: Codeunit "Notification Lifecycle Mgt.";
     begin
-        NotifLifecycleMgt.SendNotification(Notif, CallerRecID);
+        NotifLifecycleMgt.SendNotification(Notif, CallerRecId);
     end;
 }

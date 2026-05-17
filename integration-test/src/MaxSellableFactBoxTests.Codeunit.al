@@ -1,6 +1,20 @@
+namespace FBakkensen.BcLinuxSmoke.IT;
+
+using FBakkensen.BcLinuxSmoke;
+using Microsoft.Inventory.Item;
+using Microsoft.Inventory.Ledger;
+using Microsoft.Purchases.Document;
+using Microsoft.Sales.Document;
+using System.TestLibraries.Utilities;
+
 codeunit 50159 "Max Sellable FactBox Tests"
 {
     Subtype = Test;
+    Access = Internal;
+    Permissions = tabledata Item = I,
+                  tabledata "Item Ledger Entry" = RI,
+                  tabledata "Purchase Line" = I,
+                  tabledata "Sales Line" = I;
 
     var
         Assert: Codeunit "Library Assert";
@@ -31,7 +45,7 @@ codeunit 50159 "Max Sellable FactBox Tests"
         SalesLine."Shipment Date" := WorkDate();
         SalesLine.Quantity := 100;
         SalesLine."Qty. per Unit of Measure" := 1;
-        SalesLine.Insert();
+        SalesLine.Insert(false);
 
         Params := PBT.BuildParameters(SalesLine);
         Results := PBT.ComputeFromParameters(Params);
@@ -67,7 +81,7 @@ codeunit 50159 "Max Sellable FactBox Tests"
         SalesLine."Shipment Date" := WorkDate();
         SalesLine.Quantity := 100;
         SalesLine."Qty. per Unit of Measure" := 1;
-        SalesLine.Insert();
+        SalesLine.Insert(false);
 
         // Upstream change: a Purchase Order line will receive +50 in the future.
         InsertPurchaseOrderLine(ItemNo, '', '', WorkDate() + 3, 50);
@@ -82,15 +96,15 @@ codeunit 50159 "Max Sellable FactBox Tests"
 
     local procedure MakeItem(var Item: Record Item) ItemNo: Code[20]
     begin
-        ItemNo := CopyStr('MST' + Format(CurrentDateTime, 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20);
+        ItemNo := CopyStr('MST' + Format(CurrentDateTime(), 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20);
         Item.Init();
         Item."No." := ItemNo;
-        Item.Insert();
+        Item.Insert(false);
     end;
 
     local procedure UniqueDocNo(): Code[20]
     begin
-        exit(CopyStr('SO-' + Format(CurrentDateTime, 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20));
+        exit(CopyStr('SO-' + Format(CurrentDateTime(), 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20));
     end;
 
     local procedure SeedOnHand(ItemNo: Code[20]; VariantCode: Code[10]; LocationCode: Code[10]; PostingDate: Date; Qty: Decimal)
@@ -99,6 +113,7 @@ codeunit 50159 "Max Sellable FactBox Tests"
         Last: Record "Item Ledger Entry";
         NextEntryNo: Integer;
     begin
+        Last.SetLoadFields("Entry No.");
         if Last.FindLast() then
             NextEntryNo := Last."Entry No." + 1
         else
@@ -113,7 +128,7 @@ codeunit 50159 "Max Sellable FactBox Tests"
         ILE."Remaining Quantity" := Qty;
         ILE.Open := Qty > 0;
         ILE.Positive := Qty > 0;
-        ILE.Insert();
+        ILE.Insert(false);
     end;
 
     local procedure InsertPurchaseOrderLine(ItemNo: Code[20]; VariantCode: Code[10]; LocationCode: Code[10]; ExpectedReceiptDate: Date; OutstandingQtyBase: Decimal)
@@ -122,7 +137,7 @@ codeunit 50159 "Max Sellable FactBox Tests"
     begin
         PurchLine.Init();
         PurchLine."Document Type" := PurchLine."Document Type"::Order;
-        PurchLine."Document No." := CopyStr('PO-' + Format(CurrentDateTime, 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20);
+        PurchLine."Document No." := CopyStr('PO-' + Format(CurrentDateTime(), 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20);
         PurchLine."Line No." := 10000;
         PurchLine.Type := PurchLine.Type::Item;
         PurchLine."No." := ItemNo;
@@ -134,6 +149,6 @@ codeunit 50159 "Max Sellable FactBox Tests"
         PurchLine."Outstanding Quantity" := OutstandingQtyBase;
         PurchLine."Outstanding Qty. (Base)" := OutstandingQtyBase;
         PurchLine."Qty. per Unit of Measure" := 1;
-        PurchLine.Insert();
+        PurchLine.Insert(false);
     end;
 }

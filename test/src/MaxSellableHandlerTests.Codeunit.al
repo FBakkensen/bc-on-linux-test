@@ -1,6 +1,19 @@
+namespace FBakkensen.BcLinuxSmoke.Tests;
+
+using FBakkensen.BcLinuxSmoke;
+using Microsoft.Inventory.Item;
+using Microsoft.Inventory.Ledger;
+using Microsoft.Sales.Document;
+using Microsoft.Sales.Setup;
+using System.TestLibraries.Utilities;
+
 codeunit 50104 "Max Sellable Handler Tests"
 {
     Subtype = Test;
+    Access = Internal;
+    Permissions = tabledata Item = IMD,
+                  tabledata "Item Ledger Entry" = IMD,
+                  tabledata "Sales & Receivables Setup" = RIMD;
 
     var
         Assert: Codeunit "Library Assert";
@@ -16,7 +29,7 @@ codeunit 50104 "Max Sellable Handler Tests"
         SalesSetup.Init();
         SalesSetup."Stockout Warning" := true;
         SalesSetup."Max Sellable Warning" := true;
-        SalesSetup.Insert();
+        SalesSetup.Insert(false);
 
         // WHEN Stockout Warning is validated to false
         SalesSetup.Validate("Stockout Warning", false);
@@ -86,9 +99,9 @@ codeunit 50104 "Max Sellable Handler Tests"
         ILE: Record "Item Ledger Entry";
         SalesSetup: Record "Sales & Receivables Setup";
     begin
-        Item.DeleteAll();
-        ILE.DeleteAll();
-        SalesSetup.DeleteAll();
+        Item.DeleteAll(false);
+        ILE.DeleteAll(false);
+        SalesSetup.DeleteAll(false);
     end;
 
     local procedure WriteSetup(StockoutWarning: Boolean; MaxSellableWarning: Boolean)
@@ -97,11 +110,11 @@ codeunit 50104 "Max Sellable Handler Tests"
     begin
         if not SalesSetup.Get() then begin
             SalesSetup.Init();
-            SalesSetup.Insert();
+            SalesSetup.Insert(false);
         end;
         SalesSetup."Stockout Warning" := StockoutWarning;
         SalesSetup."Max Sellable Warning" := MaxSellableWarning;
-        SalesSetup.Modify();
+        SalesSetup.Modify(false);
     end;
 
     local procedure RunGateWithTinyInventoryAndBigQty(EnteredQty: Decimal; OnHand: Decimal; StockoutHits: Boolean): Integer
@@ -131,7 +144,7 @@ codeunit 50104 "Max Sellable Handler Tests"
 
         Item.Init();
         Item."No." := 'ITEM-A';
-        Item.Insert();
+        Item.Insert(false);
 
         ILE.Init();
         ILE."Entry No." := 1;
@@ -139,7 +152,7 @@ codeunit 50104 "Max Sellable Handler Tests"
         ILE."Posting Date" := WorkDate() - 5;
         ILE.Quantity := OnHand;
         ILE."Remaining Quantity" := OnHand;
-        ILE.Insert();
+        ILE.Insert(false);
 
         SalesLine."Document Type" := SalesLine."Document Type"::Order;
         SalesLine."Document No." := 'SO-1';

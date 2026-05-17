@@ -1,5 +1,32 @@
+namespace FBakkensen.BcLinuxSmoke.IT;
+
+using FBakkensen.BcLinuxSmoke;
+using Microsoft.Assembly.Document;
+using Microsoft.Inventory.Item;
+using Microsoft.Inventory.Ledger;
+using Microsoft.Inventory.Transfer;
+using Microsoft.Manufacturing.Document;
+using Microsoft.Projects.Project.Planning;
+using Microsoft.Purchases.Document;
+using Microsoft.Sales.Document;
+using Microsoft.Sales.Setup;
+using Microsoft.Service.Document;
+
 codeunit 50162 "Max Sellable Perf Fixture"
 {
+    Access = Internal;
+    Permissions = tabledata "Assembly Header" = I,
+                  tabledata "Assembly Line" = I,
+                  tabledata Item = I,
+                  tabledata "Item Ledger Entry" = RI,
+                  tabledata "Job Planning Line" = I,
+                  tabledata "Prod. Order Component" = I,
+                  tabledata "Prod. Order Line" = I,
+                  tabledata "Purchase Line" = I,
+                  tabledata "Sales & Receivables Setup" = RIM,
+                  tabledata "Sales Line" = I,
+                  tabledata "Service Line" = I,
+                  tabledata "Transfer Line" = I;
     var
         FixtureItemNo: Code[20];
 
@@ -18,6 +45,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
         Samples: array[5] of BigInteger;
         MaxMs: BigInteger;
         i: Integer;
+        BudgetExceededErr: Label 'RunGatedFlow max %1 ms exceeded budget %2 ms over %3 events. Samples (ms): [%4, %5, %6, %7, %8].', Comment = '%1 = Max ms, %2 = Budget ms, %3 = Event count, %4 = Sample 1 ms, %5 = Sample 2 ms, %6 = Sample 3 ms, %7 = Sample 4 ms, %8 = Sample 5 ms';
     begin
         SeedFixture(EventCount, SalesLineUnderTest);
 
@@ -28,18 +56,18 @@ codeunit 50162 "Max Sellable Perf Fixture"
         // Warm-up — first call hits cold caches, discard the result.
         Handler.RunGatedFlow(SalesLineUnderTest, EventSource, StockoutChecker, NotificationDispatcher);
 
+        MaxMs := 0;
         for i := 1 to 5 do begin
-            StartTime := CurrentDateTime;
+            StartTime := CurrentDateTime();
             Handler.RunGatedFlow(SalesLineUnderTest, EventSource, StockoutChecker, NotificationDispatcher);
-            ElapsedMs := CurrentDateTime - StartTime;
+            ElapsedMs := CurrentDateTime() - StartTime;
             Samples[i] := ElapsedMs;
             if ElapsedMs > MaxMs then
                 MaxMs := ElapsedMs;
         end;
 
         if MaxMs > BudgetMs then
-            Error(
-                'RunGatedFlow max %1ms exceeded budget %2ms over %3 events. Samples (ms): [%4, %5, %6, %7, %8].',
+            Error(BudgetExceededErr,
                 MaxMs, BudgetMs, EventCount,
                 Samples[1], Samples[2], Samples[3], Samples[4], Samples[5]);
     end;
@@ -57,10 +85,10 @@ codeunit 50162 "Max Sellable Perf Fixture"
         ServiceN: Integer;
         JobN: Integer;
     begin
-        FixtureItemNo := CopyStr('PERF' + Format(CurrentDateTime, 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, MaxStrLen(FixtureItemNo));
+        FixtureItemNo := CopyStr('PERF' + Format(CurrentDateTime(), 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, MaxStrLen(FixtureItemNo));
         Item.Init();
         Item."No." := FixtureItemNo;
-        Item.Insert();
+        Item.Insert(false);
 
         // On-hand high enough that CU 311's inventory check does not fire — the fast path
         // through the gate runs end to end into Calculate.
@@ -105,7 +133,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
         SalesLineUnderTest."Outstanding Quantity" := 1;
         SalesLineUnderTest."Outstanding Qty. (Base)" := 1;
         SalesLineUnderTest."Qty. per Unit of Measure" := 1;
-        SalesLineUnderTest.Insert();
+        SalesLineUnderTest.Insert(false);
     end;
 
     local procedure ConfigureSetup()
@@ -114,11 +142,11 @@ codeunit 50162 "Max Sellable Perf Fixture"
     begin
         if not SalesSetup.Get() then begin
             SalesSetup.Init();
-            SalesSetup.Insert();
+            SalesSetup.Insert(false);
         end;
         SalesSetup."Stockout Warning" := true;
         SalesSetup."Max Sellable Warning" := true;
-        SalesSetup.Modify();
+        SalesSetup.Modify(false);
     end;
 
     local procedure SeedOnHand(Qty: Decimal)
@@ -127,6 +155,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
         Last: Record "Item Ledger Entry";
         NextEntryNo: Integer;
     begin
+        Last.SetLoadFields("Entry No.");
         if Last.FindLast() then
             NextEntryNo := Last."Entry No." + 1
         else
@@ -139,7 +168,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
         ILE."Remaining Quantity" := Qty;
         ILE.Open := true;
         ILE.Positive := true;
-        ILE.Insert();
+        ILE.Insert(false);
     end;
 
     local procedure SeedSalesLines(N: Integer)
@@ -160,7 +189,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
             SalesLine."Outstanding Quantity" := 1;
             SalesLine."Outstanding Qty. (Base)" := 1;
             SalesLine."Qty. per Unit of Measure" := 1;
-            SalesLine.Insert();
+            SalesLine.Insert(false);
         end;
     end;
 
@@ -182,7 +211,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
             PurchLine."Outstanding Quantity" := 1;
             PurchLine."Outstanding Qty. (Base)" := 1;
             PurchLine."Qty. per Unit of Measure" := 1;
-            PurchLine.Insert();
+            PurchLine.Insert(false);
         end;
     end;
 
@@ -206,7 +235,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
             TransferLine."Outstanding Qty. (Base)" := 1;
             TransferLine."Derived From Line No." := 0;
             TransferLine."Qty. per Unit of Measure" := 1;
-            TransferLine.Insert();
+            TransferLine.Insert(false);
         end;
     end;
 
@@ -227,7 +256,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
             ProdOrderLine."Remaining Quantity" := 1;
             ProdOrderLine."Remaining Qty. (Base)" := 1;
             ProdOrderLine."Qty. per Unit of Measure" := 1;
-            ProdOrderLine.Insert();
+            ProdOrderLine.Insert(false);
         end;
     end;
 
@@ -248,7 +277,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
             ProdOrderComp."Remaining Quantity" := 1;
             ProdOrderComp."Remaining Qty. (Base)" := 1;
             ProdOrderComp."Qty. per Unit of Measure" := 1;
-            ProdOrderComp.Insert();
+            ProdOrderComp.Insert(false);
         end;
     end;
 
@@ -268,7 +297,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
             AsmHeader."Remaining Quantity" := 1;
             AsmHeader."Remaining Quantity (Base)" := 1;
             AsmHeader."Qty. per Unit of Measure" := 1;
-            AsmHeader.Insert();
+            AsmHeader.Insert(false);
         end;
     end;
 
@@ -290,7 +319,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
             AsmLine."Remaining Quantity" := 1;
             AsmLine."Remaining Quantity (Base)" := 1;
             AsmLine."Qty. per Unit of Measure" := 1;
-            AsmLine.Insert();
+            AsmLine.Insert(false);
         end;
     end;
 
@@ -312,7 +341,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
             ServiceLine."Outstanding Quantity" := 1;
             ServiceLine."Outstanding Qty. (Base)" := 1;
             ServiceLine."Qty. per Unit of Measure" := 1;
-            ServiceLine.Insert();
+            ServiceLine.Insert(false);
         end;
     end;
 
@@ -345,7 +374,7 @@ codeunit 50162 "Max Sellable Perf Fixture"
             JPL."Remaining Qty." := 1;
             JPL."Remaining Qty. (Base)" := 1;
             JPL."Qty. per Unit of Measure" := 1;
-            JPL.Insert();
+            JPL.Insert(false);
         end;
     end;
 }

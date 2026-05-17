@@ -1,3 +1,7 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using Microsoft.Sales.Setup;
+
 tableextension 50000 "Sales Recv Setup Ext" extends "Sales & Receivables Setup"
 {
     fields
@@ -6,7 +10,7 @@ tableextension 50000 "Sales Recv Setup Ext" extends "Sales & Receivables Setup"
         {
             Caption = 'Max Sellable Warning';
             DataClassification = SystemMetadata;
-            ToolTip = 'If enabled, BC warns when a Sales Line quantity exceeds the Max Sellable Quantity (ATP). Requires Stockout Warning to be enabled — turning Stockout Warning off automatically disables this flag.';
+            ToolTip = 'Specifies whether BC warns when a Sales Line quantity exceeds the Max Sellable Quantity. Requires Stockout Warning to be enabled.';
         }
     }
 }

@@ -1,29 +1,25 @@
+namespace FBakkensen.BcLinuxSmoke.Tests;
+
+using FBakkensen.BcLinuxSmoke;
+
 codeunit 50103 "Notification Dispatcher Stub" implements "INotificationDispatcher"
 {
+    Access = Internal;
+
     var
+        LastRecId: RecordId;
         DispatchCount: Integer;
         LastMessage: Text;
-        LastRecId: RecordId;
 
-    procedure Dispatch(var Notif: Notification; CallerRecID: RecordID)
+    procedure Dispatch(var Notif: Notification; CallerRecId: RecordId)
     begin
         DispatchCount += 1;
-        LastMessage := Notif.Message;
-        LastRecId := CallerRecID;
+        LastMessage := Notif.Message();
+        LastRecId := CallerRecId;
     end;
 
     procedure GetDispatchCount(): Integer
     begin
         exit(DispatchCount);
-    end;
-
-    procedure GetLastMessage(): Text
-    begin
-        exit(LastMessage);
-    end;
-
-    procedure GetLastRecId(): RecordId
-    begin
-        exit(LastRecId);
     end;
 }

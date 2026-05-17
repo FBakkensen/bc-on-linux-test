@@ -1,9 +1,14 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using Microsoft.Sales.Document;
+
 page 50000 "Max Sellable FactBox"
 {
     PageType = CardPart;
     SourceTable = "Sales Line";
     Caption = 'Max Sellable Qty';
     ApplicationArea = Basic, Suite;
+    Extensible = false;
 
     layout
     {
@@ -11,16 +16,11 @@ page 50000 "Max Sellable FactBox"
         {
             field(MaxSellableQty; MaxSellableQty)
             {
-                ApplicationArea = Basic, Suite;
                 Caption = 'Max Sellable Qty';
                 Editable = false;
                 DecimalPlaces = 0 : 5;
+                AutoFormatType = 0;
                 ToolTip = 'Specifies how many of the line''s unit of measure can still be promised on the Shipment Date, computed asynchronously via Page Background Task.';
-
-                trigger OnDrillDown()
-                begin
-                    OpenItemAvailabilityByDate();
-                end;
             }
         }
     }
@@ -55,20 +55,5 @@ page 50000 "Max Sellable FactBox"
             exit;
         Params := PBT.BuildParameters(Rec);
         CurrPage.EnqueueBackgroundTask(TaskId, Codeunit::"Max Sellable PBT", Params);
-    end;
-
-    local procedure OpenItemAvailabilityByDate()
-    var
-        Item: Record Item;
-        ItemAvailByEvent: Page "Item Availability by Event";
-    begin
-        if Rec."No." = '' then
-            exit;
-        if not Item.Get(Rec."No.") then
-            exit;
-        Item.SetRange("Variant Filter", Rec."Variant Code");
-        Item.SetRange("Location Filter", Rec."Location Code");
-        ItemAvailByEvent.SetRecord(Item);
-        ItemAvailByEvent.Run();
     end;
 }

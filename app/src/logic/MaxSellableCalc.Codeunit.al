@@ -1,6 +1,13 @@
+namespace FBakkensen.BcLinuxSmoke;
+
+using Microsoft.Inventory.Item;
+using Microsoft.Inventory.Ledger;
+using Microsoft.Sales.Document;
+
 codeunit 50000 "Max Sellable Calc"
 {
     Access = Public;
+    Permissions = tabledata Item = R;
 
     procedure Calculate(
         ItemNo: Code[20];
@@ -8,12 +15,10 @@ codeunit 50000 "Max Sellable Calc"
         LocationCode: Code[10];
         ShipmentDate: Date;
         var ExcludingSalesLine: Record "Sales Line";
-        EventSource: Interface "IEventSource";
-        StockoutChecker: Interface "IStockoutChecker";
-        NotificationDispatcher: Interface "INotificationDispatcher"): Decimal
+        EventSource: Interface "IEventSource"): Decimal
     var
         Item: Record Item;
-        EventBuf: Record "Max Sellable Event Buf" temporary;
+        TempEventBuf: Record "Max Sellable Event Buf" temporary;
         FloorDate: Date;
         Balance: Decimal;
         Projected: Decimal;
@@ -27,8 +32,8 @@ codeunit 50000 "Max Sellable Calc"
             Item.SetRange("Variant Filter", VariantCode);
             Item.SetRange("Location Filter", LocationCode);
         end;
-        EventSource.CollectEvents(Item, ExcludingSalesLine, EventBuf);
-        Projected := MinWalk(EventBuf, Balance);
+        EventSource.CollectEvents(Item, ExcludingSalesLine, TempEventBuf);
+        Projected := MinWalk(TempEventBuf, Balance);
         if Projected < 0 then
             exit(0);
         exit(ToLineUoM(Projected, ExcludingSalesLine));
@@ -44,20 +49,18 @@ codeunit 50000 "Max Sellable Calc"
         exit(BaseQty / QtyPerBase);
     end;
 
-    local procedure MinWalk(var EventBuf: Record "Max Sellable Event Buf" temporary; StartingBalance: Decimal): Decimal
+    local procedure MinWalk(var TempEventBuf: Record "Max Sellable Event Buf" temporary; StartingBalance: Decimal): Decimal
     var
         Balance: Decimal;
         MinBalance: Decimal;
     begin
-        // Min over the post-event running balances. If no events fire, the
-        // projection never moves off StartingBalance, so return that.
-        EventBuf.SetCurrentKey("Event Date");
-        if not EventBuf.FindSet() then
+        TempEventBuf.SetCurrentKey("Event Date");
+        if not TempEventBuf.FindSet() then
             exit(StartingBalance);
-        Balance := StartingBalance + EventBuf."Signed Quantity (Base)";
+        Balance := StartingBalance + TempEventBuf."Signed Quantity (Base)";
         MinBalance := Balance;
-        while EventBuf.Next() <> 0 do begin
-            Balance += EventBuf."Signed Quantity (Base)";
+        while TempEventBuf.Next() <> 0 do begin
+            Balance += TempEventBuf."Signed Quantity (Base)";
             if Balance < MinBalance then
                 MinBalance := Balance;
         end;

@@ -1,6 +1,19 @@
+namespace FBakkensen.BcLinuxSmoke.IT;
+
+using FBakkensen.BcLinuxSmoke;
+using Microsoft.Inventory.Item;
+using Microsoft.Inventory.Ledger;
+using Microsoft.Sales.Document;
+using Microsoft.Service.Document;
+using System.TestLibraries.Utilities;
+
 codeunit 50154 "Service Line Evt Src Tests"
 {
     Subtype = Test;
+    Access = Internal;
+    Permissions = tabledata Item = I,
+                  tabledata "Item Ledger Entry" = RI,
+                  tabledata "Service Line" = I;
 
     var
         Assert: Codeunit "Library Assert";
@@ -46,15 +59,15 @@ codeunit 50154 "Service Line Evt Src Tests"
 
     local procedure MakeItem(var Item: Record Item) ItemNo: Code[20]
     begin
-        ItemNo := CopyStr('MST' + Format(CurrentDateTime, 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20);
+        ItemNo := CopyStr('MST' + Format(CurrentDateTime(), 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20);
         Item.Init();
         Item."No." := ItemNo;
-        Item.Insert();
+        Item.Insert(false);
     end;
 
     local procedure UniqueDocNo(): Code[20]
     begin
-        exit(CopyStr('SV-' + Format(CurrentDateTime, 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20));
+        exit(CopyStr('SV-' + Format(CurrentDateTime(), 0, '<Hours24,2><Minutes,2><Seconds,2><Thousands,3>') + Format(Random(9999)), 1, 20));
     end;
 
     local procedure SeedOnHand(ItemNo: Code[20]; VariantCode: Code[10]; LocationCode: Code[10]; PostingDate: Date; Qty: Decimal)
@@ -63,6 +76,7 @@ codeunit 50154 "Service Line Evt Src Tests"
         Last: Record "Item Ledger Entry";
         NextEntryNo: Integer;
     begin
+        Last.SetLoadFields("Entry No.");
         if Last.FindLast() then
             NextEntryNo := Last."Entry No." + 1
         else
@@ -77,7 +91,7 @@ codeunit 50154 "Service Line Evt Src Tests"
         ILE."Remaining Quantity" := Qty;
         ILE.Open := Qty > 0;
         ILE.Positive := Qty > 0;
-        ILE.Insert();
+        ILE.Insert(false);
     end;
 
     local procedure InsertServiceLine(DocType: Enum "Service Document Type"; DocNo: Code[20]; LineNo: Integer; ItemNo: Code[20]; VariantCode: Code[10]; LocationCode: Code[10]; NeededByDate: Date; OutstandingQtyBase: Decimal)
@@ -98,7 +112,7 @@ codeunit 50154 "Service Line Evt Src Tests"
         ServiceLine."Outstanding Quantity" := OutstandingQtyBase;
         ServiceLine."Outstanding Qty. (Base)" := OutstandingQtyBase;
         ServiceLine."Qty. per Unit of Measure" := 1;
-        ServiceLine.Insert();
+        ServiceLine.Insert(false);
     end;
 
     local procedure RunCalculate(ItemNo: Code[20]; VariantCode: Code[10]; LocationCode: Code[10]; ShipmentDate: Date): Decimal
@@ -106,17 +120,11 @@ codeunit 50154 "Service Line Evt Src Tests"
         ExcludingSalesLine: Record "Sales Line";
         MaxSellableCalc: Codeunit "Max Sellable Calc";
         BCEventSource: Codeunit "BC Event Source";
-        StockoutCheckerStub: Codeunit "IT Stockout Checker Stub";
-        NotifDispatcherStub: Codeunit "IT Notif. Dispatcher Stub";
         EventSource: Interface "IEventSource";
-        StockoutChecker: Interface "IStockoutChecker";
-        NotificationDispatcher: Interface "INotificationDispatcher";
     begin
         EventSource := BCEventSource;
-        StockoutChecker := StockoutCheckerStub;
-        NotificationDispatcher := NotifDispatcherStub;
         exit(MaxSellableCalc.Calculate(
             ItemNo, VariantCode, LocationCode, ShipmentDate, ExcludingSalesLine,
-            EventSource, StockoutChecker, NotificationDispatcher));
+            EventSource));
     end;
 }

@@ -1,6 +1,14 @@
+namespace FBakkensen.BcLinuxSmoke.IT;
+
+using FBakkensen.BcLinuxSmoke;
+using Microsoft.Inventory.Ledger;
+using System.TestLibraries.Utilities;
+
 codeunit 50163 "ILE Summary Query Tests"
 {
     Subtype = Test;
+    Access = Internal;
+    Permissions = tabledata "Item Ledger Entry" = RI;
 
     var
         Assert: Codeunit "Library Assert";
@@ -36,7 +44,7 @@ codeunit 50163 "ILE Summary Query Tests"
         ILESummary.Close();
 
         // THEN exactly 3 rows, one per (variant, location, date) bucket for our item
-        Assert.AreEqual(3, BucketQty.Count, 'Query must produce one row per (item, variant, location, posting_date) bucket.');
+        Assert.AreEqual(3, BucketQty.Count(), 'Query must produce one row per (item, variant, location, posting_date) bucket.');
         Assert.AreEqual(-25, BucketQty.Get(BucketKey('', 'BLUE', Day1)), 'Day1/BLUE: sum(-10, -20, +5) = -25 (returns net against demand).');
         Assert.AreEqual(-40, BucketQty.Get(BucketKey('', 'RED', Day1)), 'Day1/RED: sum(-40) = -40.');
         Assert.AreEqual(-50, BucketQty.Get(BucketKey('', 'BLUE', Day2)), 'Day2/BLUE: sum(-50) = -50.');
@@ -58,6 +66,7 @@ codeunit 50163 "ILE Summary Query Tests"
         Last: Record "Item Ledger Entry";
         NextEntryNo: Integer;
     begin
+        Last.SetLoadFields("Entry No.");
         if Last.FindLast() then
             NextEntryNo := Last."Entry No." + 1
         else
