@@ -2,6 +2,10 @@
   "mcpServers": {
     "al": {
       "command": "./scripts/al-mcp.sh"
+    },
+    "bc-knowledge": {
+      "command": "npx",
+      "args": ["bc-code-intelligence-mcp"]
     }
   }
 }
