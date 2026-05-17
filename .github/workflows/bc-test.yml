@@ -19,7 +19,7 @@ jobs:
   bc-tests:
     uses: StefanMaron/MsDyn365Bc.On.Linux/.github/workflows/bc-test-from-source.yml@master
     with:
-      bc_version:     "27.5"
+      bc_version:     "28.1"
       bc_country:     "w1"
       app_dirs:       "app"
       test_app_dirs:  "test"

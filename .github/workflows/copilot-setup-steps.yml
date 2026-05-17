@@ -38,11 +38,11 @@ jobs:
       - name: Set BC environment variables
         run: |
           {
-            echo "BC_VERSION=27.5"
+            echo "BC_VERSION=28.1"
             echo "BC_COUNTRY=w1"
             echo "BC_TYPE=sandbox"
             echo "BC_RUNNER_IMAGE=ghcr.io/stefanmaron/msdyn365bc.on.linux/bc-runner:latest"
-            echo "AL_TOOL_VERSION=16.2.28.57946"
+            echo "AL_TOOL_VERSION=17.0.34.45391"
             echo "BC_LINUX_REF=master"
             echo "APP_DIRS=app"
             echo "TEST_APP_DIRS=test"

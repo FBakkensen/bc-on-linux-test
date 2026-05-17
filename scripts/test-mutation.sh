@@ -30,6 +30,12 @@ LOG_PATH="$MUTATION_DIR/mutations.json"
 mkdir -p "$MUTATION_DIR"
 
 cd "$MUTATION_DIR"
+# Ensure local tools are restored. `dotnet tool list` finds the manifest at the
+# repo root from anywhere in the tree, but `dotnet <command>` won't run a tool
+# unless `dotnet tool restore` has populated ~/.dotnet/toolResolverCache/ for
+# this manifest at least once. No-op on warm runs; required on a fresh clone.
+dotnet tool restore > /dev/null
+
 exec dotnet al-mutate run \
     "$ROOT_DIR/app/src/logic" \
     --stubs "$ROOT_DIR/app/src/seams" \

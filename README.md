@@ -25,7 +25,7 @@ This workspace is a local consumer setup for running Business Central on Linux f
 
 The upstream repo defaults are used in this workspace:
 
-- BC version: `27.5`
+- BC version: `28.1`
 - Country: `w1`
 - Dev endpoint: `http://localhost:7049/BC/dev`
 - Base URL: `http://localhost:7048/BC`
