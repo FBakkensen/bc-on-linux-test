@@ -22,6 +22,13 @@ ABC_DEFAULT_CUT_POINTS: dict[str, float] = {"A": 0.70, "B": 0.20, "C": 0.10}
 DEFAULT_REVENUE_WINDOW_MONTHS = 12
 DEFAULT_HISTORY_WINDOW_MONTHS = 6
 
+SERVICE_LEVEL_DEFAULTS: dict[str, float] = {
+    "A": 0.98,
+    "B": 0.95,
+    "C": 0.90,
+    "Unclassified": 0.95,
+}
+
 SB_ADI_THRESHOLD = 1.32
 SB_CV2_THRESHOLD = 0.49
 MIN_SAMPLES_FOR_DISPERSION = 2
@@ -51,6 +58,9 @@ class ClassifierConfig:
     revenue_window_months: int = DEFAULT_REVENUE_WINDOW_MONTHS
     history_window_months: int = DEFAULT_HISTORY_WINDOW_MONTHS
     strategic_skus: frozenset[tuple[str, str, str]] = frozenset()
+    service_level_by_abc: dict[str, float] = field(
+        default_factory=lambda: dict(SERVICE_LEVEL_DEFAULTS),
+    )
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> ClassifierConfig:
@@ -59,6 +69,10 @@ class ClassifierConfig:
         strategic = frozenset(
             (str(item), str(variant), str(loc)) for item, variant, loc in strategic_raw
         )
+        # A custom map overrides only the keys it specifies; missing classes
+        # keep ADR 0005 defaults rather than falling out of the lookup.
+        service_levels = dict(SERVICE_LEVEL_DEFAULTS)
+        service_levels.update(payload.get("service_level_by_abc", {}))
         return cls(
             abc_cut_points=dict(payload.get("abc_cut_points", ABC_DEFAULT_CUT_POINTS)),
             revenue_window_months=int(
@@ -68,6 +82,7 @@ class ClassifierConfig:
                 payload.get("history_window_months", DEFAULT_HISTORY_WINDOW_MONTHS),
             ),
             strategic_skus=strategic,
+            service_level_by_abc=service_levels,
         )
 
 

@@ -108,3 +108,14 @@ gains.
   unmask). The recommendation row carries an explicit caveat code; the
   bootstrap is not corrected. A lost-sales journal — which most BC tenants
   do not maintain — would be required for a clean correction.
+- **Degenerate lead-time data emits an explicit row-killed reason code,
+  not a misleading ROP.** If every observed LT sample for a SKU is zero
+  days (typically because the source extract didn't populate PO Order
+  Date, so `receipt_posting_date − po_order_date` collapses to zero),
+  the bootstrap would faithfully return `ROP=0` on a zero-length demand
+  window — a value a planner could mistake for "no buffer needed". The
+  recommender intercepts this case and emits a null recommendation with
+  reason code `Zero lead time observed`, surfacing the data-quality
+  problem instead of hiding behind a numerically-valid but operationally
+  meaningless answer. SKUs with no LT samples at all remain on the
+  `Insufficient data` reason code.

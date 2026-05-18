@@ -11,6 +11,7 @@ codes, and per-SKU summary statistics for downstream display.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Final
 
 import numpy as np
@@ -67,10 +68,14 @@ def extract_lt_series(
         ],
         ignore_index=True,
     )
-    pairs["demand_window"] = pd.Series(
-        _pair_demand_windows(pairs, ile_summary),
-        index=pairs.index,
-        dtype="object",
+    windows = _pair_demand_windows(pairs, ile_summary)
+    pairs["demand_window"] = pd.Series(windows, index=pairs.index, dtype="object")
+    # Precompute window sums so the bootstrap sampler reads a flat float64
+    # column instead of summing every window on each `sample_ltd` call.
+    pairs["demand_sum"] = np.fromiter(
+        (w.sum() for w in windows),
+        dtype="float64",
+        count=len(windows),
     )
     summary = _summarize(pairs, ile_summary)
     return LtSeriesResult(pairs=pairs, summary=summary)
@@ -79,28 +84,32 @@ def extract_lt_series(
 _SUMMARY_PERCENTILES: Final = (0.50, 0.75, 0.90, 0.95)
 
 
+def _quantile_at(series: pd.Series, *, p: float) -> float:
+    return float(series.quantile(p))
+
+
 def _summarize(pairs: pd.DataFrame, ile_summary: pd.DataFrame) -> pd.DataFrame:
     """Per-SKU LT distribution stats. Cold-start SKUs flagged, no stats raised."""
     sku_universe = _sku_universe(pairs, ile_summary)
     if sku_universe.empty:
         return _empty_summary()
     if pairs.empty:
-        stats = pd.DataFrame(columns=[*SKU_COLUMNS])
+        # Empty stats frame still needs the lt_count column so the merge below
+        # produces a NaN-filled `lt_count` for every SKU — fillna(0) then flips
+        # them all into the `insufficient_data=True` cold-start signal.
+        stats = pd.DataFrame(columns=[*SKU_COLUMNS, "lt_count"])
     else:
-        stats = pairs.groupby(SKU_COLUMNS, as_index=False).agg(
+        # Single groupby pass that computes count/mean/std plus all four
+        # percentiles, instead of one groupby per percentile.
+        stats = pairs.groupby(SKU_COLUMNS, as_index=False, sort=False).agg(
             lt_count=("lead_time_days", "count"),
             lt_mean=("lead_time_days", "mean"),
             lt_sigma=("lead_time_days", "std"),
+            **{
+                f"lt_p{int(p * 100)}": ("lead_time_days", partial(_quantile_at, p=p))
+                for p in _SUMMARY_PERCENTILES
+            },
         )
-        for p in _SUMMARY_PERCENTILES:
-            col = f"lt_p{int(p * 100)}"
-            q = (
-                pairs.groupby(SKU_COLUMNS)["lead_time_days"]
-                .quantile(p)
-                .reset_index()
-                .rename(columns={"lead_time_days": col})
-            )
-            stats = stats.merge(q, on=SKU_COLUMNS, how="left")
 
     merged = sku_universe.merge(stats, on=SKU_COLUMNS, how="left")
     merged["lt_count"] = merged["lt_count"].fillna(0).astype("int64")

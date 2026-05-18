@@ -1,16 +1,14 @@
-"""Walking-skeleton smoke test for `bc_planning_optimizer.run`.
+"""Smoke tests for `bc_planning_optimizer.run` after the bootstrap LTD swap.
 
-Drives the public interface only (no peeking at internal modules) so the test
-survives the real-math swap in later slices.
+End-to-end shape + presence of the public output, not the specific math
+behind ROP / SS (covered in `test_bootstrap_recommender` and `test_simulator`).
 """
 
-import json
+from __future__ import annotations
 
 from bc_planning_optimizer import run
 
-
-def _load(output_path):
-    return json.loads(output_path.read_text())
+from .conftest import ILE_HEADER, PURCHASE_LT_HEADER, load_recommendations
 
 
 def test_run_writes_recommendations_json(synthetic_ile_summary):
@@ -22,7 +20,7 @@ def test_run_writes_recommendations_json(synthetic_ile_summary):
 
 def test_recommendation_carries_sku_triplet(synthetic_ile_summary):
     output_path = run(synthetic_ile_summary)
-    payload = _load(output_path)
+    payload = load_recommendations(output_path)
 
     assert len(payload["recommendations"]) == 1
     rec = payload["recommendations"][0]
@@ -31,84 +29,41 @@ def test_recommendation_carries_sku_triplet(synthetic_ile_summary):
     assert rec["location_code"] == "BLUE"
 
 
-def test_reorder_point_uses_daily_demand_times_default_lead_time(synthetic_ile_summary):
-    # Fixture: ITEM-A signed quantities [-10,-20,-30,-40,-50] across 5 daily
-    # buckets → mean -30 → daily_demand 30. DEFAULT_LEAD_TIME_DAYS = 7 →
-    # reorder_point = 30 × 7 = 210.
-    output_path = run(synthetic_ile_summary)
-    payload = _load(output_path)
-
-    rec = payload["recommendations"][0]
-    assert rec["reorder_point"] == 30.0 * 7.0
-
-
-def test_safety_stock_is_half_reorder_point(synthetic_ile_summary):
-    output_path = run(synthetic_ile_summary)
-    payload = _load(output_path)
-
-    rec = payload["recommendations"][0]
-    assert rec["safety_stock"] == rec["reorder_point"] / 2
-
-
-def test_positive_quantities_net_against_negative_demand(tmp_path):
-    # ADR 0006: returns (positive ILE-Sale rows) net automatically against
-    # demand at the SKU grain. Three demand buckets of -30 plus one return of
-    # +15 → signed mean (-30·3 + 15) / 4 = -18.75 → daily_demand 18.75.
-    extract = tmp_path / "ile_with_returns.csv"
-    extract.write_text(
-        "item_no,variant_code,location_code,posting_date,quantity\n"
-        "ITEM-A,,BLUE,2026-05-01,-30\n"
-        "ITEM-A,,BLUE,2026-05-02,-30\n"
-        "ITEM-A,,BLUE,2026-05-03,-30\n"
-        "ITEM-A,,BLUE,2026-05-04,15\n"
-    )
-
-    output_path = run(extract)
-    payload = _load(output_path)
-    rec = payload["recommendations"][0]
-    assert rec["reorder_point"] == 18.75 * 7
-
-
 def test_multi_sku_emits_independent_recommendations(tmp_path):
     extract = tmp_path / "multi_sku.csv"
     extract.write_text(
-        "item_no,variant_code,location_code,posting_date,quantity\n"
-        "ITEM-A,,BLUE,2026-05-01,-10\n"
-        "ITEM-A,,BLUE,2026-05-02,-20\n"
-        "ITEM-B,RED,GREEN,2026-05-01,-40\n"
-        "ITEM-B,RED,GREEN,2026-05-02,-60\n"
+        ILE_HEADER
+        + "".join(f"ITEM-A,,BLUE,2026-04-{1 + i:02d},-2,20\n" for i in range(7))
+        + "".join(f"ITEM-B,RED,GREEN,2026-04-{1 + i:02d},-6,60\n" for i in range(7)),
+    )
+    (tmp_path / "purchase_lt.csv").write_text(
+        PURCHASE_LT_HEADER
+        + "ITEM-A,,BLUE,V-001,2026-04-08,2026-04-15,2026-04-15,1,PR-A\n"
+        + "ITEM-B,RED,GREEN,V-002,2026-04-08,2026-04-15,2026-04-15,1,PR-B\n",
     )
 
-    output_path = run(extract)
-    payload = _load(output_path)
+    output_path = run(extract, asof_date="2026-05-01", seed=42, n_draws=1_000)
+    payload = load_recommendations(output_path)
     by_sku = {
         (r["item_no"], r["variant_code"], r["location_code"]): r for r in payload["recommendations"]
     }
 
     assert set(by_sku) == {("ITEM-A", "", "BLUE"), ("ITEM-B", "RED", "GREEN")}
-
-    a = by_sku[("ITEM-A", "", "BLUE")]
-    assert a["reorder_point"] == 15.0 * 7.0  # mean(-10,-20) = -15 → daily 15 → ROP 105
-    assert a["safety_stock"] == a["reorder_point"] / 2
-
-    b = by_sku[("ITEM-B", "RED", "GREEN")]
-    assert b["reorder_point"] == 50.0 * 7.0  # mean(-40,-60) = -50 → daily 50 → ROP 350
-    assert b["safety_stock"] == b["reorder_point"] / 2
+    for rec in by_sku.values():
+        assert rec["reorder_point"] is not None
+        assert rec["safety_stock"] is not None
+        assert rec["reorder_point"] >= 0.0
+        assert rec["safety_stock"] >= 0.0
 
 
-def test_returns_exceeding_demand_clamp_daily_demand_to_zero(tmp_path):
-    # Pathological SKU: more returns than sales in the window. Signed mean is
-    # positive, but daily_demand must clamp at zero — a negative reorder
-    # point is nonsense for the recommender.
-    extract = tmp_path / "ile_returns_dominant.csv"
-    extract.write_text(
-        "item_no,variant_code,location_code,posting_date,quantity\n"
-        "ITEM-A,,BLUE,2026-05-01,-5\n"
-        "ITEM-A,,BLUE,2026-05-02,10\n"
-    )
+def test_sku_without_lt_samples_emits_null_recommendation(tmp_path):
+    extract = tmp_path / "no_lt.csv"
+    extract.write_text(ILE_HEADER + "ITEM-COLD,,BLUE,2026-03-25,-2,20\n")
 
-    output_path = run(extract)
-    payload = _load(output_path)
-    rec = payload["recommendations"][0]
-    assert rec["reorder_point"] == 0
-    assert rec["safety_stock"] == 0
+    output_path = run(extract, asof_date="2026-05-01")
+    rec = load_recommendations(output_path)["recommendations"][0]
+
+    assert rec["item_no"] == "ITEM-COLD"
+    assert rec["reorder_point"] is None
+    assert rec["safety_stock"] is None
+    assert rec["reason_code"] == "Insufficient data"

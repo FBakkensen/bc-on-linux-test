@@ -1,30 +1,33 @@
-"""End-to-end walking-skeleton entry point.
+"""End-to-end recommendation pipeline.
 
-`run(extract_path)` reads an Item Ledger Entry summary CSV, derives naive
-per-SKU recommendations, attaches ABC + Syntetos-Boylan classifier fields
-per issue #16, and writes a `recommendations.json` file next to the input.
-Real pipeline (forecaster → lead-time extractor → simulator → recommender)
-lands in later slices.
+`run(extract_path)` reads an Item Ledger Entry summary CSV plus four optional
+sibling LT extracts and writes a `recommendations.json` next to the input.
+Missing LT files are treated as zero historical samples — the affected SKUs
+flag `Insufficient data` and emit a null recommendation.
 """
 
 from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
 import pandas as pd
-from extracts.bc_files import read_ile_summary
+from extracts.bc_files import (
+    read_assembly_lt,
+    read_ile_summary,
+    read_production_lt,
+    read_purchase_receipt_lt,
+    read_transfer_lt,
+)
 
 from .classifier import ClassifierConfig, classify
-from .recommender import SKU_COLUMNS, recommend
+from .lead_time import extract_lt_series
+from .recommender import SKU_COLUMNS, BootstrapConfig, recommend_with_bootstrap
 
-DEFAULT_LEAD_TIME_DAYS = 7
-"""Placeholder lead-time used by the walking skeleton. The real bootstrap
-(purchase-receipt date deltas, prod-order output-minus-consumption, transfer
-source→dest, assembly posting-minus-starting per ADR 0006) lands alongside
-the lead-time extract in a later slice."""
+DEFAULT_N_DRAWS = 10_000
 
 
 def run(
@@ -32,14 +35,17 @@ def run(
     *,
     config_path: Path | None = None,
     asof_date: pd.Timestamp | str | None = None,
+    seed: int = 0,
+    n_draws: int = DEFAULT_N_DRAWS,
 ) -> Path:
-    """Read the ILE-summary CSV, write recommendations.json beside it, return that path.
+    """Read the extracts, write recommendations.json beside the ILE CSV, return that path.
 
-    `config_path` points at a JSON setup file with `abc_cut_points`,
-    `revenue_window_months`, `history_window_months`, and `strategic_skus`
-    keys; absent keys take the ADR-default values. `asof_date` overrides the
-    windowing anchor (defaults to `max(posting_date)` for deterministic
-    fixture-driven tests).
+    `config_path` points at a JSON setup file (`abc_cut_points`,
+    `revenue_window_months`, `history_window_months`, `strategic_skus`,
+    `service_level_by_abc`); absent keys take ADR defaults. `asof_date`
+    overrides the windowing anchor. `seed` is the ModelRunId salt mixed into
+    every per-SKU bootstrap seed for reproducibility. `n_draws` sets the
+    bootstrap sample size — callers can drop it for fast tests.
     """
     extract_path = Path(extract_path)
     ile_summary = read_ile_summary(extract_path)
@@ -47,8 +53,21 @@ def run(
     resolved_asof = _resolve_asof(asof_date, ile_summary)
 
     classifier_df = classify(ile_summary, asof_date=resolved_asof, config=config)
-    observations = _aggregate_for_recommender(ile_summary, DEFAULT_LEAD_TIME_DAYS)
-    recommendations = recommend(observations)
+    lt_result = extract_lt_series(
+        **_load_lt_extracts(extract_path.parent),
+        ile_summary=ile_summary,
+    )
+
+    recommendations = recommend_with_bootstrap(
+        lt_pairs=lt_result.pairs,
+        lt_summary=lt_result.summary,
+        classifier=classifier_df,
+        config=BootstrapConfig(
+            service_level_by_abc=config.service_level_by_abc,
+            n_draws=n_draws,
+            model_run_id_seed=seed,
+        ),
+    )
     enriched = _enrich_with_classifier(recommendations, classifier_df)
 
     output_path = extract_path.parent / "recommendations.json"
@@ -73,27 +92,78 @@ def _resolve_asof(
     return pd.Timestamp(ile_summary["posting_date"].max())
 
 
-def _aggregate_for_recommender(ile_summary: pd.DataFrame, lead_time_days: int) -> pd.DataFrame:
-    """Roll signed ILE bucket quantities into per-SKU rows the recommender consumes.
+_PURCHASE_LT_DTYPES: dict[str, str] = {
+    "item_no": "string",
+    "variant_code": "string",
+    "location_code": "string",
+    "vendor_no": "string",
+    "document_no": "string",
+    "po_order_date": "datetime64[ns]",
+    "receipt_posting_date": "datetime64[ns]",
+    "expected_receipt_date": "datetime64[ns]",
+    "quantity": "float64",
+    "order_to_receipt_days": "int64",
+    "plan_to_receipt_days": "int64",
+    "trigger_date": "datetime64[ns]",
+}
+_PRODUCTION_LT_DTYPES: dict[str, str] = {
+    "prod_order_no": "string",
+    "item_no": "string",
+    "variant_code": "string",
+    "location_code": "string",
+    "lead_time_days": "int64",
+    "source": "string",
+    "replenishment_system": "string",
+    "shared_sample_key": "string",
+    "plan_to_actual_days": "int64",
+    "trigger_date": "datetime64[ns]",
+}
+_TRANSFER_LT_DTYPES: dict[str, str] = {
+    "document_no": "string",
+    "item_no": "string",
+    "variant_code": "string",
+    "location_code": "string",
+    "lead_time_days": "int64",
+    "source": "string",
+    "replenishment_system": "string",
+    "shared_sample_key": "string",
+    "plan_to_actual_days": "object",
+    "trigger_date": "datetime64[ns]",
+}
+_ASSEMBLY_LT_DTYPES: dict[str, str] = {
+    "assembly_doc_no": "string",
+    "item_no": "string",
+    "variant_code": "string",
+    "location_code": "string",
+    "lead_time_days": "int64",
+    "replenishment_system": "string",
+    "source": "string",
+    "shared_sample_key": "string",
+    "plan_to_actual_days": "object",
+    "trigger_date": "datetime64[ns]",
+}
 
-    Daily demand is the mean signed bucket quantity, negated and clamped at zero —
-    negatives are demand, positives are returns netting against it (ADR 0006).
-    """
-    grouped = ile_summary.groupby(SKU_COLUMNS, sort=False)
-    rows = []
-    for (item_no, variant_code, location_code), group in grouped:
-        signed_mean = float(group["quantity"].mean())
-        daily_demand = max(-signed_mean, 0.0)
-        rows.append(
-            {
-                "item_no": item_no,
-                "variant_code": variant_code,
-                "location_code": location_code,
-                "daily_demand": daily_demand,
-                "lead_time_days": lead_time_days,
-            },
-        )
-    return pd.DataFrame(rows)
+_LtReader = Callable[[Path], pd.DataFrame]
+# kwarg name on `extract_lt_series` → (sibling filename, reader, empty-frame dtypes).
+_LT_EXTRACTS: dict[str, tuple[str, _LtReader, dict[str, str]]] = {
+    "purchase_lt": ("purchase_lt.csv", read_purchase_receipt_lt, _PURCHASE_LT_DTYPES),
+    "production_lt": ("production_lt.csv", read_production_lt, _PRODUCTION_LT_DTYPES),
+    "transfer_lt": ("transfer_lt.csv", read_transfer_lt, _TRANSFER_LT_DTYPES),
+    "assembly_lt": ("assembly_lt.csv", read_assembly_lt, _ASSEMBLY_LT_DTYPES),
+}
+
+
+def _load_lt_extracts(extract_dir: Path) -> dict[str, pd.DataFrame]:
+    """Return the four LT extracts keyed by `extract_lt_series` kwarg name."""
+    extracts: dict[str, pd.DataFrame] = {}
+    for kwarg, (filename, reader, dtypes) in _LT_EXTRACTS.items():
+        candidate = extract_dir / filename
+        extracts[kwarg] = reader(candidate) if candidate.exists() else _empty_frame(dtypes)
+    return extracts
+
+
+def _empty_frame(dtypes: dict[str, str]) -> pd.DataFrame:
+    return pd.DataFrame({col: pd.Series(dtype=dt) for col, dt in dtypes.items()})
 
 
 def _enrich_with_classifier(
@@ -135,5 +205,8 @@ def _enrich_with_classifier(
 
 
 def _nan_to_none(value: float) -> float | None:
-    """JSON has no NaN; emit null instead so consumers don't choke on `NaN`."""
+    # JSON has no NaN; emit null instead so consumers don't choke.
     return None if math.isnan(value) else value
+
+
+__all__ = ["SKU_COLUMNS", "run"]

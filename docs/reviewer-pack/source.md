@@ -777,6 +777,15 @@ records its quantified delta (`Old`, `New`, `Δ`, `Δ%`) so the planner
 sees, for example, *"Lead time p95 increased: 14d → 21d (+50%)"*
 rather than *"Lead time increased"*.
 
+Two codes sit **outside** this list of 18: `Insufficient data` (no
+recommendation possible at any grain — see section 5 cascade exit) and
+`Zero lead time observed` (lead-time samples exist but every observed
+LT is zero days, typically a missing PO Order Date in the source data).
+These are row-killing codes: they appear *instead of* a recommendation,
+not alongside one, with `null` ROP / Safety Stock fields. They surface
+data-quality problems rather than hiding them behind a numerically-valid
+but operationally-meaningless `ROP=0`.
+
 The 18 codes fall into four families with different mechanics:
 
 **Demand pattern (comparative — needs baseline):**
