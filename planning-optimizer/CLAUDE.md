@@ -18,20 +18,24 @@ Domain vocabulary in [`CONTEXT.md`](../CONTEXT.md) (planning glossary section).
   `confidence`) must not import from `extracts/`. Dependency direction is
   one-way: `extracts/` adapts BC to the core schema; the core does not reach
   into the seam.
-- **Stub modules are intentional.** `classifier.py`, `forecaster.py`,
-  `lead_time.py`, `simulator.py`, and `confidence.py` are docstring-only
-  placeholders reserving named seams for later slices. Don't delete them
-  and don't flag them as dead code. `extracts/bc_api.py` now hosts the
-  OData fetch + paginate + transform helpers (see slice #12); it grows
-  one fetcher per AL API Query.
+- **Stub modules are intentional.** `forecaster.py` and `confidence.py`
+  are docstring-only placeholders reserving named seams for later slices.
+  Don't delete them and don't flag them as dead code. `extracts/bc_api.py`
+  hosts the OData fetch + paginate + transform helpers (one fetcher per AL
+  API Query). `lead_time.py` (slice #17) and the sampler-only portion of
+  `simulator.py` (slice #18, `sample_ltd`) are now implemented; the
+  inventory-dynamics loop in `simulator.py` lands later per ADR 0007.
 - **TDD on the math seam.** Tests drive the public `bc_planning_optimizer.run`
-  interface only — no poking at internal modules. Survives the bootstrap-LTD /
-  SBA / AutoETS / simulator swap without rewriting.
-- **Walking-skeleton math is deliberately naive.** `ROP = mean(daily_demand)
-  × mean(lead_time_days)`, `Safety Stock = ROP / 2`. Real math (bootstrap-LTD
-  α-quantile, simulator-verified policy) lands in subsequent slices per
-  [ADR 0006](../docs/adr/0006-bootstrap-ltd-shared-monte-carlo-engine.md) and
-  [ADR 0007](../docs/adr/0007-simulator-fidelity-b-simplified-policy-replay.md).
+  interface only — no poking at internal modules. Survives the SBA /
+  AutoETS / inventory-dynamics swap without rewriting.
+- **Real ROP / Safety Stock math is bootstrap-driven** (ADR 0006). For each
+  `(Item, Variant, Location)`: bootstrap `N` joint `(LT, demand_window)`
+  pairs, then `ROP = quantile_α(LTD)`, `SS = max(ROP − mean(LTD), 0)`. `α`
+  per ABC class comes from setup config (defaults A=0.98, B=0.95, C=0.90,
+  Unclassified=0.95 per ADR 0005). SKUs without LT history emit a null
+  recommendation with `reason_code = "Insufficient data"`; SKUs whose LT
+  samples are all zero days emit `reason_code = "Zero lead time observed"`
+  (data-quality surface, not a misleading `ROP=0`).
 
 ## Common commands
 
@@ -61,8 +65,15 @@ jupyter nbconvert --to notebook --execute --inplace \
 - **CSV dtype**: spell out `dtype=` for every column in `read_extract` so
   pandas skips inference. `keep_default_na=False` is required — the empty
   `variant_code` cell is a real value (no-variant SKU), not `NaN`.
-- **Recommendation JSON shape**: `{"recommendations": [{"item_no", "variant_code",
-  "location_code", "reorder_point", "safety_stock"}, ...]}`. Real slices will
-  add `model_run_id`, `recommendation_grain` (intended vs computed per
-  [ADR 0008](../docs/adr/0008-hierarchical-grain-with-promotion.md)), confidence
-  buckets, and policy fields.
+- **Recommendation JSON shape**: `{"recommendations": [{"item_no",
+  "variant_code", "location_code", "reorder_point", "safety_stock",
+  "abc_class", "demand_pattern_class", "adi", "cv_squared",
+  "revenue_window_total", "is_strategic"}, ...]}`. Null-ROP rows also
+  carry `reason_code`. Future slices add `model_run_id`,
+  `recommendation_grain` (intended vs computed per
+  [ADR 0008](../docs/adr/0008-hierarchical-grain-with-promotion.md)),
+  confidence buckets, and policy fields.
+- **LT extracts ride alongside the ILE summary** by file-name convention:
+  `purchase_lt.csv`, `production_lt.csv`, `transfer_lt.csv`,
+  `assembly_lt.csv` in the same directory. Missing files default to empty
+  (cold-start signal — those SKUs land on `Insufficient data`).
