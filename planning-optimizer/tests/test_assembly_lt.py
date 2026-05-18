@@ -14,6 +14,7 @@ Returns the unified shape used by all replenishment-system readers.
 
 from pathlib import Path
 
+import pandas as pd
 from extracts.bc_files import read_assembly_lt
 
 HEADER = "assembly_doc_no,item_no,variant_code,location_code,starting_date,posting_date\n"
@@ -58,6 +59,20 @@ def test_multi_row_keeps_lt_independent(tmp_path):
     assert by_doc["ASM-002"]["lead_time_days"] == 9
 
 
+def test_trigger_date_is_starting_date(tmp_path):
+    # Assembly's order-trigger date is the header Starting Date — that's
+    # when components were committed. lead_time.py pairs each LT sample
+    # with a demand window ending immediately before this date.
+    extract = _write(
+        tmp_path,
+        "ASM-001,KIT-A,,BLUE,2026-04-01,2026-04-05\n",
+    )
+
+    df = read_assembly_lt(extract)
+
+    assert df.iloc[0]["trigger_date"] == pd.Timestamp("2026-04-01")
+
+
 def test_empty_extract_returns_empty_frame_with_schema(tmp_path):
     extract = _write(tmp_path)  # header only
 
@@ -73,5 +88,6 @@ def test_empty_extract_returns_empty_frame_with_schema(tmp_path):
         "source",
         "shared_sample_key",
         "plan_to_actual_days",
+        "trigger_date",
     ):
         assert col in df.columns

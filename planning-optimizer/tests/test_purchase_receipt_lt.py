@@ -123,6 +123,21 @@ def test_bc_zero_date_is_treated_as_missing(tmp_path):
     assert row["order_to_receipt_days"] == 7
 
 
+def test_trigger_date_is_po_order_date(tmp_path):
+    # The order-trigger date for a purchase receipt is the PO Order Date —
+    # when the supplier commitment was placed. lead_time.py pairs each LT
+    # sample with a demand window ending immediately before this date, so
+    # the seam exposes it under a uniform `trigger_date` column.
+    extract = _write(
+        tmp_path,
+        "ITEM-A,,BLUE,V-001,2026-04-01,2026-04-08,2026-04-08,10,PR-0001\n",
+    )
+
+    df = read_purchase_receipt_lt(extract)
+
+    assert df.iloc[0]["trigger_date"] == pd.Timestamp("2026-04-01")
+
+
 def test_empty_extract_returns_empty_frame_with_schema(tmp_path):
     extract = _write(tmp_path)  # header only
 
@@ -131,3 +146,4 @@ def test_empty_extract_returns_empty_frame_with_schema(tmp_path):
     assert len(df) == 0
     assert "order_to_receipt_days" in df.columns
     assert "plan_to_receipt_days" in df.columns
+    assert "trigger_date" in df.columns

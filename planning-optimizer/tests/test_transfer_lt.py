@@ -17,6 +17,7 @@ filters `Entry Type = Transfer`. Unmatched source-only or dest-only rows
 
 from pathlib import Path
 
+import pandas as pd
 from extracts.bc_files import read_transfer_lt
 
 HEADER = "document_no,item_no,variant_code,location_code,posting_date,quantity\n"
@@ -96,6 +97,21 @@ def test_pairing_respects_item_and_variant(tmp_path):
     assert pairs[("ITEM-B", "")]["lead_time_days"] == 3
 
 
+def test_trigger_date_is_source_posting_date(tmp_path):
+    # Transfer's order-trigger date is the source-side posting date — when
+    # stock left the source location. lead_time.py pairs each LT sample with
+    # a demand window ending immediately before this date.
+    extract = _write(
+        tmp_path,
+        "TR-001,ITEM-A,,BLUE,2026-04-01,-5\n",
+        "TR-001,ITEM-A,,GREEN,2026-04-04,5\n",
+    )
+
+    df = read_transfer_lt(extract)
+
+    assert df.iloc[0]["trigger_date"] == pd.Timestamp("2026-04-01")
+
+
 def test_empty_extract_returns_empty_frame_with_schema(tmp_path):
     extract = _write(tmp_path)  # header only
 
@@ -111,5 +127,6 @@ def test_empty_extract_returns_empty_frame_with_schema(tmp_path):
         "source",
         "shared_sample_key",
         "plan_to_actual_days",
+        "trigger_date",
     ):
         assert col in df.columns

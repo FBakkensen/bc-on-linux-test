@@ -24,6 +24,7 @@ shared_sample_key, plan_to_actual_days)` shape.
 
 from pathlib import Path
 
+import pandas as pd
 from extracts.bc_files import read_production_lt
 
 HEADER = (
@@ -135,6 +136,34 @@ def test_multiple_prod_orders_kept_independent(tmp_path):
     assert by_po["PO-501"]["lead_time_days"] == 11  # 2026-08-12 - 2026-08-01
 
 
+def test_trigger_date_is_min_consumption_when_ile_primary(tmp_path):
+    # ILE-primary samples treat min consumption as the order-trigger date —
+    # that's when work effectively started. lead_time.py uses this date to
+    # carve the matching pre-trigger demand window for the bootstrap pair.
+    extract = _write(
+        tmp_path,
+        "PO-100,ITEM-A,,BLUE,consumption,2026-04-01,2026-03-30,2026-04-08,2026-04-07\n",
+        "PO-100,ITEM-A,,BLUE,output,2026-04-08,2026-03-30,2026-04-08,2026-04-07\n",
+    )
+
+    df = read_production_lt(extract)
+
+    assert df.iloc[0]["trigger_date"] == pd.Timestamp("2026-04-01")
+
+
+def test_trigger_date_is_starting_date_when_header_fallback(tmp_path):
+    # No consumption → fallback path → trigger is the prod order's Starting
+    # Date (the planner's intended start).
+    extract = _write(
+        tmp_path,
+        "PO-200,ITEM-B,RED,GREEN,output,2026-05-10,2026-05-01,2026-05-09,2026-05-08\n",
+    )
+
+    df = read_production_lt(extract)
+
+    assert df.iloc[0]["trigger_date"] == pd.Timestamp("2026-05-01")
+
+
 def test_empty_extract_returns_empty_frame_with_schema(tmp_path):
     extract = _write(tmp_path)  # header only
 
@@ -150,5 +179,6 @@ def test_empty_extract_returns_empty_frame_with_schema(tmp_path):
         "source",
         "shared_sample_key",
         "plan_to_actual_days",
+        "trigger_date",
     ):
         assert col in df.columns

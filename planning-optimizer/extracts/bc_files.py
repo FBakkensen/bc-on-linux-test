@@ -122,6 +122,9 @@ def read_purchase_receipt_lt(extract_path: Path) -> pd.DataFrame:
     )
     df["order_to_receipt_days"] = (df["receipt_posting_date"] - df["po_order_date"]).dt.days
     df["plan_to_receipt_days"] = (df["receipt_posting_date"] - df["expected_receipt_date"]).dt.days
+    # `trigger_date` is the uniform name lead_time.py reads to carve the
+    # matching pre-trigger demand window — same column on every LT extract.
+    df["trigger_date"] = df["po_order_date"]
     return df
 
 
@@ -178,6 +181,7 @@ def read_production_lt(extract_path: Path) -> pd.DataFrame:
                 "replenishment_system": pd.Series(dtype="string"),
                 "shared_sample_key": pd.Series(dtype="string"),
                 "plan_to_actual_days": pd.Series(dtype="int64"),
+                "trigger_date": pd.Series(dtype="datetime64[ns]"),
             },
         )
 
@@ -211,6 +215,16 @@ def read_production_lt(extract_path: Path) -> pd.DataFrame:
     output_combos["replenishment_system"] = REPLENISHMENT_PRODUCTION
     output_combos["shared_sample_key"] = po_no
     output_combos["plan_to_actual_days"] = po_no.map(plan_to_actual_td).dt.days
+    # ILE-primary: trigger = min consumption (real work-start). Fallback:
+    # trigger = header Starting Date (planner intent — only date available).
+    # Compose by row-wise dict lookup — `np.where` / `Series.where` cast
+    # datetime64 → float64 when one branch is fully empty / all-NaT.
+    starting_per_po = outputs.groupby("prod_order_no")["prod_order_starting_date"].first()
+    trigger_map = {
+        po: (min_consumption[po] if po in min_consumption.index else starting_per_po[po])
+        for po in po_no
+    }
+    output_combos["trigger_date"] = pd.to_datetime(po_no.map(trigger_map))
     return output_combos
 
 
@@ -239,6 +253,7 @@ def read_assembly_lt(extract_path: Path) -> pd.DataFrame:
     df["source"] = SOURCE_ASSEMBLY_HEADER
     df["shared_sample_key"] = df["assembly_doc_no"]
     df["plan_to_actual_days"] = pd.NA
+    df["trigger_date"] = df["starting_date"]
     return df.drop(columns=["starting_date", "posting_date"])
 
 
@@ -286,6 +301,7 @@ def read_transfer_lt(extract_path: Path) -> pd.DataFrame:
     paired["source"] = SOURCE_TRANSFER
     paired["shared_sample_key"] = paired["document_no"]
     paired["plan_to_actual_days"] = pd.NA
+    paired["trigger_date"] = paired["_source_date"]
     return paired.drop(columns=["_source_date", "_dest_date"])
 
 
