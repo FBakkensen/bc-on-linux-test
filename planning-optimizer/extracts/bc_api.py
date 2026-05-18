@@ -33,6 +33,7 @@ ILE_SUMMARY_CAMEL_TO_SNAKE = {
     "locationCode": "location_code",
     "postingDate": "posting_date",
     "quantity": "quantity",
+    "salesAmountActual": "sales_amount",
 }
 ILE_SUMMARY_COLUMNS = list(ILE_SUMMARY_CAMEL_TO_SNAKE.values())
 

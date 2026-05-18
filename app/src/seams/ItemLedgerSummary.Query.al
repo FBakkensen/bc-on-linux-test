@@ -35,6 +35,10 @@ query 50000 "Item Ledger Summary"
             {
                 Method = Sum;
             }
+            column(salesAmountActual; "Sales Amount (Actual)")
+            {
+                Method = Sum;
+            }
         }
     }
 }

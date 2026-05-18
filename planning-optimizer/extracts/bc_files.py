@@ -64,18 +64,28 @@ def _read_extract_csv(
 
 
 def read_ile_summary(extract_path: Path) -> pd.DataFrame:
-    """Read the ILE-summary CSV; empty variant_code is a valid no-variant SKU."""
-    return pd.read_csv(
+    """Read the ILE-summary CSV; empty variant_code is a valid no-variant SKU.
+
+    `sales_amount` carries posted `Sales Amount Actual` for ABC revenue
+    contribution per ADR 0005 / issue #16. Defaulted to 0.0 when the column
+    is absent so older fixtures and the unit-quantity-only walking-skeleton
+    still load.
+    """
+    df = pd.read_csv(
         extract_path,
         dtype={
             "item_no": "string",
             "variant_code": "string",
             "location_code": "string",
             "quantity": "float64",
+            "sales_amount": "float64",
         },
         parse_dates=["posting_date"],
         keep_default_na=False,
     )
+    if "sales_amount" not in df.columns:
+        df["sales_amount"] = 0.0
+    return df
 
 
 _PURCHASE_RECEIPT_LT_STR_COLUMNS = (
