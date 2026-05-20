@@ -1,0 +1,26 @@
+# Overrides the upstream bc-linux SQL service to use a derived image that
+# bakes mssql-server-fts in and bumps SQL memory to 6GB so per-company
+# table creation doesn't OOM. Required by Business Central's Company.Insert
+# / Database.CopyCompany when creating new per-company tables.
+#
+# Source-of-truth in this repo: scripts/bc-linux-overrides/docker-compose.override.yml
+# Copied into bc-linux/ at runtime by scripts/seed-company.sh.
+#
+# Per ADR 0013. Once StefanMaron/MsDyn365Bc.On.Linux upstreams these
+# defaults, this file can be deleted. No upstream issue filed yet (as of
+# the search documented in ADR 0013); search confirmed FTS / tenantid /
+# memory bumps have zero precedent upstream.
+
+services:
+  sql:
+    image: bc-linux-sql-fts:local
+    build:
+      context: .
+      dockerfile: sql-fts.Dockerfile
+    environment:
+      # BC's Company.Insert / Assisted Company Setup creates per-company SQL
+      # tables for every BaseApp object (~thousands). With FTS enabled, each
+      # gets full-text indexes too. The upstream 2GB default OOMs partway
+      # through with "Error 701: insufficient system memory in resource pool
+      # 'internal'". 6GB gets through clean.
+      MSSQL_MEMORY_LIMIT_MB: ${MSSQL_MEMORY_LIMIT_MB:-6144}
